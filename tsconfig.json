@@ -2,11 +2,13 @@
   "files": [],
   "references": [
     {
-      "path": "./tsconfig.node.json"
+      "path": "./packages/electron"
     },
     {
-      "path": "./tsconfig.web.json"
+      "path": "./packages/web"
+    },
+    {
+      "path": "./packages/charts"
     }
   ]
 }
-

@@ -9,38 +9,21 @@
     "node": ">=22.13.0",
     "pnpm": ">=11.9.0 <12"
   },
-  "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "pnpm run typecheck && electron-vite build",
-    "preview": "electron-vite preview",
-    "typecheck": "vue-tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "test": "vitest run --passWithNoTests"
-  },
-  "dependencies": {
-    "@antv/g2": "^5.4.8",
-    "@fontsource/noto-sans": "^5.2.10",
-    "@hugo-ui/shadcn-vue": "0.2.0-local.1782721372794",
-    "@lucide/vue": "^1.21.0",
-    "@tanstack/vue-query": "^5.101.2",
-    "papaparse": "^5.5.4",
-    "pinia": "^3.0.4",
-    "vue": "^3.5.39",
-    "vue-i18n": "^11.4.6",
-    "vue-router": "^5.1.0"
+    "start": "pnpm run dev",
+    "dev": "concurrently -k -n web,electron -c cyan,magenta \"pnpm run dev:web\" \"pnpm run dev:electron\"",
+    "dev:web": "pnpm --filter @hugo-entitlement-importer/web dev",
+    "dev:electron": "wait-on http://127.0.0.1:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 pnpm --filter @hugo-entitlement-importer/electron dev",
+    "build": "pnpm run typecheck && pnpm run prepare:renderer && pnpm --filter @hugo-entitlement-importer/electron build",
+    "prepare:renderer": "pnpm run build:charts && pnpm run build:web",
+    "build:charts": "pnpm --filter @hugo-entitlement-importer/charts build",
+    "build:web": "pnpm --filter @hugo-entitlement-importer/web build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.1",
-    "@types/node": "^26.0.1",
-    "@types/papaparse": "^5.5.2",
-    "@vitejs/plugin-vue": "^6.0.7",
-    "@vue/tsconfig": "^0.9.1",
-    "electron": "^42.5.0",
-    "electron-vite": "^5.0.0",
-    "tailwindcss": "^4.3.1",
-    "typescript": "^6.0.3",
-    "vite": "^7.3.6",
-    "vitest": "^4.1.9",
-    "vue-tsc": "^3.3.5"
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "wait-on": "^9.0.10"
   }
 }

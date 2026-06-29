@@ -1,0 +1,37 @@
+{
+  "name": "@hugo-entitlement-importer/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans": "^5.2.10",
+    "@hugo-entitlement-importer/charts": "workspace:*",
+    "@hugo-ui/shadcn-vue": "0.2.0-local.1782721372794",
+    "@lucide/vue": "^1.21.0",
+    "@tanstack/vue-query": "^5.101.2",
+    "papaparse": "^5.5.4",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.39",
+    "vue-i18n": "^11.4.6",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.1",
+    "@types/node": "^26.0.1",
+    "@types/papaparse": "^5.5.2",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/tsconfig": "^0.9.1",
+    "tailwindcss": "^4.3.1",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.9",
+    "vue-tsc": "^3.3.5"
+  }
+}
