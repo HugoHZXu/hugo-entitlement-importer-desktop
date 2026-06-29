@@ -1,25 +1,25 @@
-email,name,department,action,seatQuantity,note
-amy.chen@example.com,Amy Chen,Analytics,assign,1,June onboarding
-noah.kim@example.com,Noah Kim,Operations,revoke,1,Team changed
-liam.patel@example.com,Liam Patel,Finance,assign,2,Finance analytics seats
-sofia.garcia@example.com,Sofia Garcia,Design,assign,1,Contractor access
-marco.rossi@example.com,Marco Rossi,Sales,revoke,1,Left regional pilot
-nina.wong@example.com,Nina Wong,Support,assign,1,Support workspace access
-priya.shah@example.com,Priya Shah,Engineering,assign,1,Engineering access
-eve.chen@example.com,Eve Chen,Analytics,assign,1,Analytics enablement
-luca.fan@example.com,Luca Fan,Product,assign,1,Product planning access
-mia.brown@example.com,Mia Brown,HR,assign,1,HR reporting access
-ethan.lee@example.com,Ethan Lee,Legal,assign,1,Legal workspace access
-olivia.ng@example.com,Olivia Ng,Marketing,assign,2,Marketing analytics seats
-jack.miller@example.com,Jack Miller,Sales,assign,1,Sales dashboard access
-ava.davis@example.com,Ava Davis,Customer Success,revoke,1,Account transition
-benjamin.clark@example.com,Benjamin Clark,Engineering,assign,3,Platform engineering seats
-zoe.martin@example.com,Zoe Martin,Operations,assign,1,Operations planning access
-harper.evans@example.com,Harper Evans,IT,assign,1,IT admin access
-daniel.king@example.com,Daniel King,Finance,revoke,1,Finance rotation
-emma.scott@example.com,Emma Scott,Design,assign,1,Design system access
-owen.hall@example.com,Owen Hall,Support,assign,1,Support onboarding
-isabella.young@example.com,Isabella Young,Security,assign,1,Security review access
-logan.walker@example.com,Logan Walker,Product,revoke,1,Product pilot ended
-grace.allen@example.com,Grace Allen,Analytics,assign,2,Analytics expansion seats
-henry.wright@example.com,Henry Wright,Operations,assign,1,Operations enablement
+email,name,department,action,seatQuantity
+amy.chen@example.com,Amy Chen,Analytics,assign,1
+noah.kim@example.com,Noah Kim,Operations,revoke,1
+liam.patel@example.com,Liam Patel,Finance,assign,2
+sofia.garcia@example.com,Sofia Garcia,Design,assign,1
+marco.rossi@example.com,Marco Rossi,Sales,revoke,1
+nina.wong@example.com,Nina Wong,Support,assign,1
+priya.shah@example.com,Priya Shah,Engineering,assign,1
+eve.chen@example.com,Eve Chen,Analytics,assign,1
+luca.fan@example.com,Luca Fan,Product,assign,1
+mia.brown@example.com,Mia Brown,HR,assign,1
+ethan.lee@example.com,Ethan Lee,Legal,assign,1
+olivia.ng@example.com,Olivia Ng,Marketing,assign,2
+jack.miller@example.com,Jack Miller,Sales,assign,1
+ava.davis@example.com,Ava Davis,Customer Success,revoke,1
+benjamin.clark@example.com,Benjamin Clark,Engineering,assign,3
+zoe.martin@example.com,Zoe Martin,Operations,assign,1
+harper.evans@example.com,Harper Evans,IT,assign,1
+daniel.king@example.com,Daniel King,Finance,revoke,1
+emma.scott@example.com,Emma Scott,Design,assign,1
+owen.hall@example.com,Owen Hall,Support,assign,1
+isabella.young@example.com,Isabella Young,Security,assign,1
+logan.walker@example.com,Logan Walker,Product,revoke,1
+grace.allen@example.com,Grace Allen,Analytics,assign,2
+henry.wright@example.com,Henry Wright,Operations,assign,1

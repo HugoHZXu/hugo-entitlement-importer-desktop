@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { History, Settings, UploadCloud } from '@lucide/vue';
-import { computed, onMounted, ref } from 'vue';
-import { RouterLink, RouterView, useRoute } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
+
+import EntitlementAccessState from '@/features/identity/EntitlementAccessState.vue';
+import IdentityHeaderMenu from '@/features/identity/IdentityHeaderMenu.vue';
+import { useIdentitySessionStore } from '@/shared/stores/identity-session-store';
+import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
 
 const route = useRoute();
+const router = useRouter();
+const identityStore = useIdentitySessionStore();
+const importWorkflowStore = useImportWorkflowStore();
 const appInfo = ref<{ appVersion: string; platform: string } | null>(null);
 
 const navItems = [
@@ -14,10 +22,94 @@ const navItems = [
 
 const activePath = computed(() => route.path);
 const isStandaloneRoute = computed(() => route.meta.layout === 'standalone');
+const blockingAccessState = computed<
+  'error' | 'loading' | 'noAccounts' | 'noEntitlementScope' | 'organizationUnavailable' | null
+>(() => {
+  if (isStandaloneRoute.value) {
+    return null;
+  }
+
+  if (identityStore.loading || !identityStore.initialized) {
+    return 'loading';
+  }
+
+  if (identityStore.errorMessage) {
+    return 'error';
+  }
+
+  if (identityStore.accounts.length === 0) {
+    return 'noAccounts';
+  }
+
+  if (!identityStore.hasEntitlementScope) {
+    return 'noEntitlementScope';
+  }
+
+  if (!identityStore.hasUsableEntitlementScope) {
+    return 'organizationUnavailable';
+  }
+
+  return null;
+});
 
 onMounted(async () => {
   appInfo.value = await window.desktopApi.getAppInfo();
+
+  if (!isStandaloneRoute.value) {
+    void initializeIdentitySession();
+  }
 });
+
+function handleRetryIdentitySession() {
+  void initializeIdentitySession();
+}
+
+async function loadProductsForCurrentScope() {
+  if (
+    isStandaloneRoute.value ||
+    !identityStore.initialized ||
+    !identityStore.hasUsableEntitlementScope ||
+    !identityStore.selectedEntitlementOrganizationId
+  ) {
+    importWorkflowStore.clearAvailableProducts();
+    return;
+  }
+
+  await importWorkflowStore.loadAvailableProducts(identityStore.selectedEntitlementOrganizationId);
+}
+
+async function initializeIdentitySession() {
+  await identityStore.initialize();
+  await loadProductsForCurrentScope();
+}
+
+watch(isStandaloneRoute, (standalone) => {
+  if (!standalone && !identityStore.initialized && !identityStore.loading) {
+    void initializeIdentitySession();
+  }
+});
+
+watch(
+  () => identityStore.entitlementScopeKey,
+  (nextScopeKey, previousScopeKey) => {
+    if (
+      isStandaloneRoute.value ||
+      !identityStore.initialized ||
+      !previousScopeKey ||
+      nextScopeKey === previousScopeKey ||
+      previousScopeKey.startsWith('no-account:')
+    ) {
+      return;
+    }
+
+    importWorkflowStore.resetImport();
+    void loadProductsForCurrentScope();
+
+    if (!route.path.startsWith('/import/upload')) {
+      void router.push('/import/upload');
+    }
+  }
+);
 </script>
 
 <template>
@@ -56,12 +148,21 @@ onMounted(async () => {
             Local backend pending
           </p>
         </div>
-        <div class="app-meta" v-if="appInfo">
-          {{ appInfo.platform }}
+        <div class="topbar-actions">
+          <IdentityHeaderMenu />
+          <div class="app-meta" v-if="appInfo">
+            {{ appInfo.platform }}
+          </div>
         </div>
       </header>
 
-      <RouterView />
+      <EntitlementAccessState
+        v-if="blockingAccessState"
+        :detail="blockingAccessState === 'error' ? identityStore.errorMessage : null"
+        :kind="blockingAccessState"
+        @retry="handleRetryIdentitySession"
+      />
+      <RouterView v-else />
     </main>
   </div>
 </template>

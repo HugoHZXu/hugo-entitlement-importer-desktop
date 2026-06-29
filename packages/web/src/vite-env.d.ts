@@ -2,6 +2,17 @@
 
 import type { ReviewChartsPayload } from '@hugo-entitlement-importer/charts';
 
+interface ImportMetaEnv {
+  readonly VITE_BACKEND_URL?: string;
+  readonly VITE_ENTITLEMENT_GRAPHQL_URL?: string;
+  readonly VITE_ENTITLEMENT_REST_URL?: string;
+  readonly VITE_IDENTITY_SERVICE_URL?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
 interface DesktopApi {
   getAppInfo(): Promise<{
     appVersion: string;

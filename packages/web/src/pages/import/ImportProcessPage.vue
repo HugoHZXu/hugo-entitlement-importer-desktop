@@ -11,78 +11,107 @@ import {
   Timeline,
   type WorkflowStep,
 } from '@hugo-ui/shadcn-vue';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
+import type { BulkImportJobPhase } from '@/shared/types';
 
 const router = useRouter();
 const store = useImportWorkflowStore();
-const currentStepIndex = ref(0);
 let timer: number | undefined;
 
 const stepDefinitions = [
   {
-    id: 'create-job',
-    title: 'Creating local import job',
-    description: 'Preparing the backend job context for the selected entitlement.',
+    id: 'rows_staged',
+    title: 'Rows staged',
+    description: 'The backend job has stored the normalized import rows.',
   },
   {
-    id: 'upload-rows',
-    title: 'Uploading normalized rows',
-    description: 'Sending cleaned CSV rows and deleted row metadata.',
+    id: 'awaiting_review',
+    title: 'Validation reviewed',
+    description: 'Row-level validation and seat impact are ready for import.',
   },
   {
-    id: 'validate-impact',
-    title: 'Validating entitlement impact',
-    description: 'Checking seat capacity and row-level operation safety.',
+    id: 'commit_queued',
+    title: 'Commit queued',
+    description: 'The backend accepted the commit command for ready rows.',
   },
   {
-    id: 'commit-ready',
-    title: 'Committing ready rows',
-    description: 'Applying assign and revoke actions for rows that passed validation.',
+    id: 'applying_changes',
+    title: 'Applying entitlement changes',
+    description: 'Assign and revoke actions are being applied.',
   },
   {
-    id: 'prepare-result',
-    title: 'Preparing result workspace',
+    id: 'artifacts_ready',
+    title: 'Artifacts ready',
     description: 'Building the summary and downloadable result artifacts.',
   },
-];
+] satisfies Array<{ id: BulkImportJobPhase; title: string; description: string }>;
 
-const completed = computed(() => Boolean(store.processCompletedAt));
-const progressValue = computed(() =>
-  completed.value ? 100 : Math.round((currentStepIndex.value / stepDefinitions.length) * 100)
-);
-const workflowSteps = computed<WorkflowStep[]>(() =>
-  stepDefinitions.map((step, index) => ({
-    ...step,
-    status:
-      completed.value || index < currentStepIndex.value
-        ? 'success'
-        : index === currentStepIndex.value
-          ? 'active'
-          : 'pending',
-  }))
-);
-
-onMounted(() => {
-  if (!store.processStartedAt) {
-    store.startMockProcessing();
+const phaseOrder: string[] = stepDefinitions.map((step) => step.id);
+const completed = computed(() => store.commitComplete);
+const progressValue = computed(() => store.currentJob?.progressPercent ?? (completed.value ? 100 : 65));
+const statusLabel = computed(() => {
+  if (store.currentJob?.status === 'completedWithErrors') {
+    return 'Completed with errors';
   }
 
-  timer = window.setInterval(() => {
-    if (currentStepIndex.value < stepDefinitions.length - 1) {
-      currentStepIndex.value += 1;
-      return;
-    }
+  if (store.currentJob?.status === 'failed') {
+    return 'Failed';
+  }
 
-    store.completeMockProcessing();
-    window.clearInterval(timer);
-  }, 900);
+  if (completed.value) {
+    return 'Completed';
+  }
+
+  return store.currentJob?.status ?? 'Processing';
+});
+const workflowSteps = computed<WorkflowStep[]>(() =>
+  stepDefinitions.map((step) => {
+    const currentPhase = store.currentJob?.phase ?? 'commit_queued';
+    const currentIndex = phaseOrder.indexOf(currentPhase);
+    const stepIndex = phaseOrder.indexOf(step.id);
+
+    return {
+      ...step,
+      status:
+        completed.value || stepIndex < currentIndex
+          ? 'success'
+          : stepIndex === currentIndex
+            ? 'active'
+            : 'pending',
+    };
+  })
+);
+
+function schedulePoll() {
+  window.clearTimeout(timer);
+
+  if (!store.selectedJobId || completed.value) {
+    return;
+  }
+
+  const delay = Math.min(Math.max(store.currentJob?.nextPollAfterMs ?? 800, 250), 5_000);
+
+  timer = window.setTimeout(async () => {
+    await store.refreshCurrentJob();
+    schedulePoll();
+  }, delay);
+}
+
+onMounted(async () => {
+  if (!store.selectedJobId) {
+    void router.push('/import/review');
+    return;
+  }
+
+  await store.refreshCurrentJob();
+  schedulePoll();
 });
 
 onUnmounted(() => {
-  window.clearInterval(timer);
+  window.clearTimeout(timer);
 });
 </script>
 
@@ -90,16 +119,16 @@ onUnmounted(() => {
   <section class="import-screen process-screen">
     <Card class="process-card">
       <CardHeader>
-        <Badge tone="info">{{ store.selectedJobId }}</Badge>
+        <Badge tone="info">{{ store.selectedJobId ?? 'No job' }}</Badge>
         <CardTitle>Import in progress</CardTitle>
       </CardHeader>
       <CardContent>
         <div class="process-status">
           <StatusBadge
-            :label="completed ? 'Completed' : 'Processing'"
+            :label="statusLabel"
             show-dot
             :status="completed ? 'success' : 'processing'"
-            :tone="completed ? 'success' : 'info'"
+            :tone="store.currentJob?.status === 'failed' ? 'danger' : completed ? 'success' : 'info'"
           />
           <Progress
             label="Overall progress"
@@ -110,6 +139,11 @@ onUnmounted(() => {
         </div>
 
         <Timeline :steps="workflowSteps" />
+
+        <div v-if="store.apiError" class="workflow-message error">
+          <strong>Import request failed</strong>
+          <span>{{ store.apiError }}</span>
+        </div>
 
         <div class="process-footer">
           <p class="muted-copy" v-if="!completed">Processing rows. Keep this window open.</p>

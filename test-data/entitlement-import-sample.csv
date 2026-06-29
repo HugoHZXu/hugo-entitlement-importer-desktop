@@ -1,25 +1,25 @@
-email,name,department,action,seatQuantity,note
-amy.chen@example.com,Amy Chen,Analytics,assign,1,June onboarding
-noah.kim@example.com,Noah Kim,Operations,revoke,1,Team changed
-liam.patel@example.com,Liam Patel,Finance,assign,2,Finance analytics seats
-sofia.garcia@example.com,Sofia Garcia,Design,assign,1,Contractor access
-marco.rossi@example.com,Marco Rossi,Sales,revoke,1,Left regional pilot
-nina.wong@example.com,Nina Wong,Support,assign,,Blank action quantity default test
-priya.shah@example.com,Priya Shah,Engineering,,1,Blank action defaults assign
-eve.chen@example.com,Eve Chen,Analytics,assign,1,First duplicate should remain
-eve.chen@example.com,Eve Chen,Analytics,assign,1,Duplicate same action should warn
-Noah.Kim@example.com,Noah Kim,Operations,assign,1,Conflicts with revoke using case-insensitive email
-luca.fan@example.com,Luca Fan,Product,assign,1,First case duplicate should remain
-LUCA.FAN@example.com,Luca Fan,Product,assign,1,Case-insensitive duplicate should warn
-mia.brown@example.com,Mia Brown,HR,pause,1,Invalid action should block
-ethan.lee.example.com,Ethan Lee,Legal,assign,1,Invalid email should block
-,Missing Email,Security,assign,1,Missing email should block
-olivia.ng@example.com,Olivia Ng,Marketing,assign,0,Invalid zero quantity should block
-jack.miller@example.com,Jack Miller,Sales,assign,two,Invalid text quantity should block
-ava.davis@example.com,Ava Davis,Customer Success,revoke,1,Regular revoke
-benjamin.clark@example.com,Benjamin Clark,Engineering,assign,3,Multiple seat assignment
-zoe.martin@example.com,Zoe Martin,Operations,,,"Blank action and blank seat default test"
-harper.evans@example.com,Harper Evans,IT,assign,1,Ready row
-daniel.king@example.com,Daniel King,Finance,revoke,1,Ready revoke
-emma.scott@example.com,Emma Scott,Design,assign,1,Ready assign
-owen.hall@example.com,Owen Hall,Support,assign,1,Ready assign
+email,name,department,action,seatQuantity
+amy.chen@example.com,Amy Chen,Analytics,assign,1
+noah.kim@example.com,Noah Kim,Operations,revoke,1
+liam.patel@example.com,Liam Patel,Finance,assign,2
+sofia.garcia@example.com,Sofia Garcia,Design,assign,1
+marco.rossi@example.com,Marco Rossi,Sales,revoke,1
+nina.wong@example.com,Nina Wong,Support,assign,
+priya.shah@example.com,Priya Shah,Engineering,,1
+eve.chen@example.com,Eve Chen,Analytics,assign,1
+eve.chen@example.com,Eve Chen,Analytics,assign,1
+Noah.Kim@example.com,Noah Kim,Operations,assign,1
+luca.fan@example.com,Luca Fan,Product,assign,1
+LUCA.FAN@example.com,Luca Fan,Product,assign,1
+mia.brown@example.com,Mia Brown,HR,pause,1
+ethan.lee.example.com,Ethan Lee,Legal,assign,1
+,Missing Email,Security,assign,1
+olivia.ng@example.com,Olivia Ng,Marketing,assign,0
+jack.miller@example.com,Jack Miller,Sales,assign,two
+ava.davis@example.com,Ava Davis,Customer Success,revoke,1
+benjamin.clark@example.com,Benjamin Clark,Engineering,assign,3
+zoe.martin@example.com,Zoe Martin,Operations,,
+harper.evans@example.com,Harper Evans,IT,assign,1
+daniel.king@example.com,Daniel King,Finance,revoke,1
+emma.scott@example.com,Emma Scott,Design,assign,1
+owen.hall@example.com,Owen Hall,Support,assign,1

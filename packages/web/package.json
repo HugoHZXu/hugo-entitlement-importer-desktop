@@ -13,7 +13,7 @@
   "dependencies": {
     "@fontsource/noto-sans": "^5.2.10",
     "@hugo-entitlement-importer/charts": "workspace:*",
-    "@hugo-ui/shadcn-vue": "0.2.0-local.1782721372794",
+    "@hugo-ui/shadcn-vue": "0.2.0-local.1782765559315",
     "@lucide/vue": "^1.21.0",
     "@tanstack/vue-query": "^5.101.2",
     "papaparse": "^5.5.4",

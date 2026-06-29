@@ -1,33 +1,32 @@
 <script setup lang="ts">
 import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
   Combobox,
   FileDropzone,
-  MetricTile,
   type ComboboxOption,
   type FileDropzoneRejection,
 } from '@hugo-ui/shadcn-vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { parseImportCsv } from '@/features/importer/importer-validation';
+import { useIdentitySessionStore } from '@/shared/stores/identity-session-store';
 import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
 
 const router = useRouter();
 const store = useImportWorkflowStore();
+const identityStore = useIdentitySessionStore();
 const selectedFiles = ref<File[]>([]);
 const uploadError = ref<string | null>(null);
+const productMenuOpen = ref(false);
+const productQuery = ref('');
 const maxCsvSize = 5 * 1024 * 1024;
 
 const selectedProduct = computed(() => store.selectedProduct);
+const selectedProductKey = computed(() => selectedProduct.value?.key ?? null);
+const hasProducts = computed(() => store.products.length > 0);
 const productOptions = computed<ComboboxOption[]>(() =>
   store.products.map((product) => ({
-    value: product.id,
+    value: product.key,
     label: product.name,
     description: `${product.entitlementCode} · ${product.allocatedQuantity}/${product.purchasedQuantity} seats`,
   }))
@@ -36,6 +35,24 @@ const productOptions = computed<ComboboxOption[]>(() =>
 function handleProductChange(value: string | number | null) {
   if (value != null) {
     store.selectProduct(String(value));
+    productQuery.value = '';
+    selectedFiles.value = [];
+    uploadError.value = null;
+  }
+}
+
+function handleProductMenuOpenChange(open: boolean) {
+  productMenuOpen.value = open;
+  productQuery.value = open ? '' : (selectedProduct.value?.name ?? '');
+}
+
+function handleProductQueryChange(query: string) {
+  productQuery.value = query;
+}
+
+function retryLoadProducts() {
+  if (identityStore.selectedEntitlementOrganizationId) {
+    void store.loadAvailableProducts(identityStore.selectedEntitlementOrganizationId);
   }
 }
 
@@ -71,40 +88,51 @@ function handleFileRejected(rejections: FileDropzoneRejection[]) {
   uploadError.value = rejections[0]?.message ?? 'File could not be selected.';
 }
 
-function resetUpload() {
-  selectedFiles.value = [];
-  uploadError.value = null;
-  store.resetImport();
-}
+watch(
+  selectedProduct,
+  (product) => {
+    if (!productMenuOpen.value) {
+      productQuery.value = product?.name ?? '';
+    }
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
-  <section class="import-screen">
-    <div class="import-hero">
-      <div class="import-hero__copy">
-        <Badge tone="info">Bulk entitlement import</Badge>
-        <h1>Import entitlement changes from CSV</h1>
-        <p>
-          Upload one CSV for the selected product and entitlement pool. The file is parsed locally
-          before any backend job is created.
-        </p>
-      </div>
+  <section class="import-screen import-upload-screen">
+    <div class="import-workspace">
+      <aside class="target-panel" aria-labelledby="target-entitlement-title">
+        <div class="target-panel__header">
+          <h1 id="target-entitlement-title">Target entitlement</h1>
+        </div>
 
-      <Card class="import-context-card">
-        <CardHeader>
-          <CardTitle>Target entitlement</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <div class="target-panel__body">
           <Combobox
             class="target-combobox"
-            :model-value="store.selectedProductId"
+            :model-value="selectedProductKey"
+            :open="productMenuOpen"
             :options="productOptions"
+            :query="productQuery"
             label="Product"
             placeholder="Search product or entitlement"
             @update:model-value="handleProductChange"
+            @update:open="handleProductMenuOpenChange"
+            @update:query="handleProductQueryChange"
           />
 
-          <dl class="compact-metrics" v-if="selectedProduct">
+          <p v-if="store.productsLoading" class="target-state">Loading available products...</p>
+          <div v-else-if="store.productsError" class="target-state target-state--error">
+            <span>{{ store.productsError }}</span>
+            <button class="target-state__action" type="button" @click="retryLoadProducts">
+              Retry
+            </button>
+          </div>
+          <p v-else-if="!hasProducts" class="target-state">
+            No available products for this organization.
+          </p>
+
+          <dl class="target-details" v-if="selectedProduct">
             <div>
               <dt>Entitlement</dt>
               <dd>{{ selectedProduct.entitlementCode }}</dd>
@@ -116,36 +144,21 @@ function resetUpload() {
               </dd>
             </div>
           </dl>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </aside>
 
-    <div class="upload-layout">
-      <FileDropzone
-        v-model="selectedFiles"
-        accept=".csv,text/csv"
-        browse-label="Choose CSV"
-        description="Required header: email, name, department, action, seatQuantity, note"
-        :error="uploadError ?? undefined"
-        :max-size="maxCsvSize"
-        title="Drop CSV here or choose a file"
-        @reject="handleFileRejected"
-        @select="handleFileSelected"
-      />
-
-      <div class="import-actions">
-        <MetricTile
-          v-if="selectedProduct"
-          compact
-          class="upload-context-metric"
-          label="Selected entitlement"
-          :value="selectedProduct.entitlementCode"
-          :description="`${selectedProduct.allocatedQuantity} of ${selectedProduct.purchasedQuantity} seats allocated`"
-          tone="info"
+      <div class="upload-panel">
+        <FileDropzone
+          v-model="selectedFiles"
+          accept=".csv,text/csv"
+          browse-label="Choose CSV"
+          description="Preview and validate entitlement changes before starting the import."
+          :error="uploadError ?? undefined"
+          :max-size="maxCsvSize"
+          title="Drop CSV here or choose a file"
+          @reject="handleFileRejected"
+          @select="handleFileSelected"
         />
-        <Button variant="outline" tone="neutral" type="button" @click="resetUpload">
-          Reset
-        </Button>
       </div>
     </div>
   </section>

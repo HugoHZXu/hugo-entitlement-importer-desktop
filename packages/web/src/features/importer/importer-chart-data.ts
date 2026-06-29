@@ -37,6 +37,11 @@ const issueReasonLabels: Record<string, string> = {
   invalid_seat_quantity: 'Invalid seat quantity',
   duplicate_email_in_file: 'Duplicate email',
   conflicting_actions_in_file: 'Conflicting actions',
+  membership_not_found: 'Membership not found',
+  entitlement_not_active: 'Entitlement inactive',
+  already_allocated: 'Already allocated',
+  not_allocated: 'Not allocated',
+  seat_limit_exceeded: 'Seat limit exceeded',
   deleted_by_user: 'Deleted by user',
 };
 
@@ -49,7 +54,10 @@ function getFileName(input: ChartPayloadInput) {
 }
 
 function getReadyRows(rows: ImportCsvRow[]) {
-  return rows.filter((row) => !row.deleted && row.status === 'ready' && row.seatQuantity !== null);
+  return rows.filter(
+    (row) =>
+      !row.deleted && (row.status === 'ready' || row.status === 'success') && row.seatQuantity !== null
+  );
 }
 
 function calculateSeatImpact(rows: ImportCsvRow[], entitlement: EntitlementSnapshot): SeatImpactData {
@@ -76,6 +84,14 @@ function toReasonLabel(code: string) {
   return issueReasonLabels[code] ?? code.replaceAll('_', ' ');
 }
 
+function toReasonSeverity(severity: string): 'warning' | 'blocked' | 'skipped' {
+  if (severity === 'warning' || severity === 'blocked' || severity === 'skipped') {
+    return severity;
+  }
+
+  return 'blocked';
+}
+
 function getIssueReasons(rows: ImportCsvRow[], includeDeletedReason: boolean): IssueReasonDatum[] {
   const reasons = new Map<string, IssueReasonDatum>();
 
@@ -96,7 +112,7 @@ function getIssueReasons(rows: ImportCsvRow[], includeDeletedReason: boolean): I
         code: issue.code,
         label: toReasonLabel(issue.code),
         count: 1,
-        severity: issue.severity,
+        severity: toReasonSeverity(issue.severity),
       });
     }
   }
@@ -150,7 +166,7 @@ export function buildResultChartsPayload(input: ChartPayloadInput): ResultCharts
   const entitlement = getEntitlement(input);
   const resultSummary = summarizeImportResult(input.rows);
   const rowSummary = summarizeImportRows(input.rows);
-  const skippedRows = rowSummary.warningRows + rowSummary.deletedRows;
+  const skippedRows = resultSummary.skippedRows + rowSummary.deletedRows;
 
   return {
     fileName: getFileName(input),

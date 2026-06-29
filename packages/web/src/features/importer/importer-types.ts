@@ -6,27 +6,40 @@ export type ImportIssueCode =
   | 'invalid_action'
   | 'invalid_seat_quantity'
   | 'duplicate_email_in_file'
-  | 'conflicting_actions_in_file';
+  | 'conflicting_actions_in_file'
+  | 'membership_not_found'
+  | 'entitlement_not_active'
+  | 'already_allocated'
+  | 'not_allocated'
+  | 'seat_limit_exceeded'
+  | (string & {});
 
 export type ImportIssueSeverity = 'warning' | 'blocked';
 
-export type ImportRowStatus = 'ready' | 'warning' | 'blocked' | 'deleted';
+export type ImportRowStatus =
+  | 'ready'
+  | 'warning'
+  | 'blocked'
+  | 'deleted'
+  | 'skipped'
+  | 'success'
+  | 'failed';
 
 export interface ImportIssue {
   code: ImportIssueCode;
-  severity: ImportIssueSeverity;
+  severity: ImportIssueSeverity | (string & {});
   message: string;
 }
 
 export interface ImportCsvRow {
   id: string;
+  backendRowId?: string;
   rowNumber: number;
   email: string;
   name: string;
   department: string;
   action: ImportAction | string;
   seatQuantity: number | null;
-  note: string;
   userKey: string;
   deleted: boolean;
   issues: ImportIssue[];
@@ -54,4 +67,3 @@ export interface ImportResultSummary {
   skippedRows: number;
   processedRows: number;
 }
-

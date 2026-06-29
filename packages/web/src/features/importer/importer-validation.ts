@@ -14,29 +14,39 @@ import type {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_ACTIONS = new Set<ImportAction>(['assign', 'revoke']);
 
-const issueMessages: Record<ImportIssueCode, string> = {
+const issueMessages: Record<string, string> = {
   missing_email: 'Email is required.',
   invalid_email: 'Email format is invalid.',
   invalid_action: 'Action must be assign or revoke.',
   invalid_seat_quantity: 'Seat quantity must be a positive whole number.',
   duplicate_email_in_file: 'This user appears more than once in this file.',
   conflicting_actions_in_file: 'This user has both assign and revoke actions in this file.',
+  membership_not_found: 'This email does not match an active organization membership.',
+  entitlement_not_active: 'The selected entitlement is not active.',
+  already_allocated: 'This user already has this entitlement.',
+  not_allocated: 'This user does not have an active allocation to revoke.',
+  seat_limit_exceeded: 'This import would exceed the available seat quantity.',
 };
 
-const issueSeverity: Record<ImportIssueCode, ImportIssueSeverity> = {
+const issueSeverity: Record<string, ImportIssueSeverity> = {
   missing_email: 'blocked',
   invalid_email: 'blocked',
   invalid_action: 'blocked',
   invalid_seat_quantity: 'blocked',
   duplicate_email_in_file: 'warning',
   conflicting_actions_in_file: 'blocked',
+  membership_not_found: 'blocked',
+  entitlement_not_active: 'blocked',
+  already_allocated: 'warning',
+  not_allocated: 'blocked',
+  seat_limit_exceeded: 'blocked',
 };
 
 function createIssue(code: ImportIssueCode): ImportIssue {
   return {
     code,
-    severity: issueSeverity[code],
-    message: issueMessages[code],
+    severity: issueSeverity[code] ?? 'blocked',
+    message: issueMessages[code] ?? code.replaceAll('_', ' '),
   };
 }
 
@@ -139,7 +149,6 @@ export function normalizeImportRows(rows: ImportCsvRow[]): ImportCsvRow[] {
     name: row.name.trim(),
     department: row.department.trim(),
     action: normalizeAction(row.action),
-    note: row.note.trim(),
     userKey: row.email.trim().toLowerCase(),
     issues: [] as ImportIssue[],
   }));
@@ -169,7 +178,6 @@ export function parseImportCsv(content: string): ImportCsvRow[] {
       department: String(row.department ?? ''),
       action: normalizeAction(row.action),
       seatQuantity: normalizeSeatQuantity(row.seatQuantity),
-      note: String(row.note ?? ''),
       userKey: String(row.email ?? '').trim().toLowerCase(),
       deleted: false,
       issues: [],
@@ -184,16 +192,35 @@ export function summarizeImportRows(rows: ImportCsvRow[]): ImportSummary {
   return {
     totalRows: rows.length,
     activeRows: activeRows.length,
-    readyRows: activeRows.filter((row) => row.status === 'ready').length,
-    warningRows: activeRows.filter((row) => row.status === 'warning').length,
-    blockedRows: activeRows.filter((row) => row.status === 'blocked').length,
+    readyRows: activeRows.filter((row) => row.status === 'ready' || row.status === 'success')
+      .length,
+    warningRows: activeRows.filter((row) => row.status === 'warning' || row.status === 'skipped')
+      .length,
+    blockedRows: activeRows.filter((row) => row.status === 'blocked' || row.status === 'failed')
+      .length,
     deletedRows: rows.filter((row) => row.deleted).length,
-    skippedRows: activeRows.filter((row) => row.status === 'warning').length,
+    skippedRows: activeRows.filter((row) => row.status === 'warning' || row.status === 'skipped')
+      .length,
   };
 }
 
 export function summarizeImportResult(rows: ImportCsvRow[]): ImportResultSummary {
   const summary = summarizeImportRows(rows);
+  const activeRows = rows.filter((row) => !row.deleted);
+  const hasFinalStatuses = activeRows.some((row) =>
+    ['success', 'failed', 'skipped'].includes(row.status)
+  );
+
+  if (hasFinalStatuses) {
+    return {
+      successRows: activeRows.filter((row) => row.status === 'success').length,
+      failedRows: activeRows.filter((row) => row.status === 'failed' || row.status === 'blocked')
+        .length,
+      skippedRows: activeRows.filter((row) => row.status === 'skipped' || row.status === 'warning')
+        .length,
+      processedRows: activeRows.length,
+    };
+  }
 
   return {
     successRows: summary.readyRows,
@@ -205,11 +232,10 @@ export function summarizeImportResult(rows: ImportCsvRow[]): ImportResultSummary
 
 export function cloneRowWithPatch(
   row: ImportCsvRow,
-  patch: Partial<Pick<ImportCsvRow, 'email' | 'name' | 'department' | 'action' | 'seatQuantity' | 'note'>>
+  patch: Partial<Pick<ImportCsvRow, 'email' | 'name' | 'department' | 'action' | 'seatQuantity'>>
 ): ImportCsvRow {
   return {
     ...row,
     ...patch,
   };
 }
-
