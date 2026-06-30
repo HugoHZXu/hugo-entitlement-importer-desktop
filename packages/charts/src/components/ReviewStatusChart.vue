@@ -2,14 +2,25 @@
 import { Chart, type G2Spec } from '@antv/g2';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
+import type { ReviewStatusChartCopy } from '../types';
+
 export interface ReviewStatusDatum {
   label: string;
   count: number;
 }
 
+const defaultCopy: ReviewStatusChartCopy = {
+  ariaLabel: 'Review status chart',
+  eyebrow: 'Chart window probe',
+  rows: 'rows',
+  title: 'Review row distribution',
+};
+
 const props = defineProps<{
+  copy?: ReviewStatusChartCopy;
   data: ReviewStatusDatum[];
 }>();
+const copy = computed(() => props.copy ?? defaultCopy);
 
 const chartContainer = ref<HTMLElement | null>(null);
 let chart: Chart | null = null;
@@ -47,7 +58,7 @@ async function renderChart() {
     legend: false,
     tooltip: {
       title: 'label',
-      items: [{ field: 'count', name: 'Rows' }],
+      items: [{ field: 'count', name: copy.value.rows }],
     },
     style: {
       radiusTopLeft: 6,
@@ -72,7 +83,7 @@ onMounted(() => {
 });
 
 watch(
-  () => props.data,
+  () => [copy.value, props.data],
   () => {
     void renderChart();
   },
@@ -85,15 +96,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="review-status-chart" aria-label="Review status chart">
+  <section class="review-status-chart" :aria-label="copy.ariaLabel">
     <header class="review-status-chart__header">
       <div>
-        <p class="review-status-chart__eyebrow">Chart window probe</p>
-        <h1>Review row distribution</h1>
+        <p class="review-status-chart__eyebrow">{{ copy.eyebrow }}</p>
+        <h1>{{ copy.title }}</h1>
       </div>
       <div class="review-status-chart__total">
         <span>{{ totalRows }}</span>
-        <small>rows</small>
+        <small>{{ copy.rows }}</small>
       </div>
     </header>
 

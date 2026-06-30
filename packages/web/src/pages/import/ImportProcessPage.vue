@@ -11,66 +11,79 @@ import {
   type WorkflowStep,
 } from '@hugo-ui/shadcn-vue';
 import { computed, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
 import type { BulkImportJobPhase } from '@/shared/types';
 
 const router = useRouter();
+const { t, te } = useI18n();
 const store = useImportWorkflowStore();
 let timer: number | undefined;
 
-const stepDefinitions = [
-  {
-    id: 'rows_staged',
-    title: 'Rows staged',
-    description: 'The backend job has stored the normalized import rows.',
-  },
-  {
-    id: 'awaiting_review',
-    title: 'Validation reviewed',
-    description: 'Row-level validation and seat impact are ready for import.',
-  },
-  {
-    id: 'commit_queued',
-    title: 'Commit queued',
-    description: 'The backend accepted the commit command for ready rows.',
-  },
-  {
-    id: 'applying_changes',
-    title: 'Applying entitlement changes',
-    description: 'Assign and revoke actions are being applied.',
-  },
-  {
-    id: 'artifacts_ready',
-    title: 'Artifacts ready',
-    description: 'Building the summary and downloadable result artifacts.',
-  },
-] satisfies Array<{ id: BulkImportJobPhase; title: string; description: string }>;
+const stepDefinitions = computed(
+  () =>
+    [
+      {
+        id: 'rows_staged',
+        title: t('process.steps.rows_staged.title'),
+        description: t('process.steps.rows_staged.description'),
+      },
+      {
+        id: 'awaiting_review',
+        title: t('process.steps.awaiting_review.title'),
+        description: t('process.steps.awaiting_review.description'),
+      },
+      {
+        id: 'commit_queued',
+        title: t('process.steps.commit_queued.title'),
+        description: t('process.steps.commit_queued.description'),
+      },
+      {
+        id: 'applying_changes',
+        title: t('process.steps.applying_changes.title'),
+        description: t('process.steps.applying_changes.description'),
+      },
+      {
+        id: 'artifacts_ready',
+        title: t('process.steps.artifacts_ready.title'),
+        description: t('process.steps.artifacts_ready.description'),
+      },
+    ] satisfies Array<{ id: BulkImportJobPhase; title: string; description: string }>
+);
 
-const phaseOrder: string[] = stepDefinitions.map((step) => step.id);
+const phaseOrder = computed<string[]>(() => stepDefinitions.value.map((step) => step.id));
 const completed = computed(() => store.commitComplete);
-const progressValue = computed(() => store.currentJob?.progressPercent ?? (completed.value ? 100 : 65));
+const progressValue = computed(() =>
+  store.currentJob?.progressPercent ?? (completed.value ? 100 : 65)
+);
 const statusLabel = computed(() => {
   if (store.currentJob?.status === 'completedWithErrors') {
-    return 'Completed with errors';
+    return t('common.status.completedWithErrors');
   }
 
   if (store.currentJob?.status === 'failed') {
-    return 'Failed';
+    return t('common.status.failed');
   }
 
   if (completed.value) {
-    return 'Completed';
+    return t('common.status.completed');
   }
 
-  return store.currentJob?.status ?? 'Processing';
+  if (store.currentJob?.status) {
+    const key = `common.status.${store.currentJob.status}`;
+
+    return te(key) ? t(key) : store.currentJob.status;
+  }
+
+  return t('common.status.processing');
 });
 const workflowSteps = computed<WorkflowStep[]>(() =>
-  stepDefinitions.map((step) => {
+  stepDefinitions.value.map((step) => {
     const currentPhase = store.currentJob?.phase ?? 'commit_queued';
-    const currentIndex = phaseOrder.indexOf(currentPhase);
-    const stepIndex = phaseOrder.indexOf(step.id);
+    const currentIndex = phaseOrder.value.indexOf(currentPhase);
+    const stepIndex = phaseOrder.value.indexOf(step.id);
 
     return {
       ...step,
@@ -118,7 +131,7 @@ onUnmounted(() => {
   <section class="import-screen process-screen">
     <Card class="process-card">
       <CardHeader>
-        <CardTitle>Import in progress</CardTitle>
+        <CardTitle>{{ t('process.title') }}</CardTitle>
       </CardHeader>
       <CardContent>
         <div class="process-status">
@@ -129,7 +142,7 @@ onUnmounted(() => {
             :tone="store.currentJob?.status === 'failed' ? 'danger' : completed ? 'success' : 'info'"
           />
           <Progress
-            label="Overall progress"
+            :label="t('process.overallProgress')"
             :show-value="true"
             :tone="completed ? 'success' : 'default'"
             :value="progressValue"
@@ -139,20 +152,20 @@ onUnmounted(() => {
         <Timeline :steps="workflowSteps" />
 
         <div v-if="store.apiError" class="workflow-message error">
-          <strong>Import request failed</strong>
+          <strong>{{ t('process.requestFailed') }}</strong>
           <span>{{ store.apiError }}</span>
         </div>
 
         <div class="process-footer">
           <p class="process-footer__status muted-copy" v-if="!completed">
-            Processing rows. Keep this window open.
+            {{ t('process.processingRows') }}
           </p>
           <p class="process-footer__status muted-copy" v-else>
-            Processing complete. Review the generated summary.
+            {{ t('process.processingComplete') }}
           </p>
           <div class="process-footer__actions">
             <Button type="button" :disabled="!completed" @click="router.push('/import/result')">
-              View result
+              {{ t('process.viewResult') }}
             </Button>
           </div>
         </div>

@@ -9,10 +9,15 @@ export { default as SeatOccupancyChart } from './components/SeatOccupancyChart.v
 export type {
   ChartDatum,
   ChartTone,
+  ChartsPackageProbeCopy,
   IssueReasonDatum,
   ResultChartsPayload,
+  ResultChartsDashboardCopy,
   ReviewChartsPayload,
+  ReviewImpactDashboardCopy,
+  ReviewStatusChartCopy,
   SeatImpactData,
+  SeatOccupancyChartCopy,
   SeatProjectionSource,
 } from './types';
 export { createChartPlaceholder, type G2ChartHandle } from './useG2Chart';

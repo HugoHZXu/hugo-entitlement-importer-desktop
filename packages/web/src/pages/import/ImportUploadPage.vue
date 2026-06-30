@@ -6,6 +6,7 @@ import {
   type FileDropzoneRejection,
 } from '@hugo-ui/shadcn-vue';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { parseImportCsv } from '@/features/importer/importer-validation';
@@ -13,6 +14,7 @@ import { useIdentitySessionStore } from '@/shared/stores/identity-session-store'
 import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
 
 const router = useRouter();
+const { t } = useI18n();
 const store = useImportWorkflowStore();
 const identityStore = useIdentitySessionStore();
 const selectedFiles = ref<File[]>([]);
@@ -28,7 +30,10 @@ const productOptions = computed<ComboboxOption[]>(() =>
   store.products.map((product) => ({
     value: product.key,
     label: product.name,
-    description: `${product.entitlementCode} · ${product.allocatedQuantity}/${product.purchasedQuantity} seats`,
+    description: `${product.entitlementCode} · ${t('upload.productSeatsDescription', {
+      allocated: product.allocatedQuantity,
+      purchased: product.purchasedQuantity,
+    })}`,
   }))
 );
 
@@ -64,7 +69,7 @@ async function importFile(file: File | null | undefined) {
   }
 
   if (!file.name.toLowerCase().endsWith('.csv')) {
-    uploadError.value = 'Please select a CSV file.';
+    uploadError.value = t('upload.errors.chooseCsv');
     return;
   }
 
@@ -72,7 +77,7 @@ async function importFile(file: File | null | undefined) {
   const rows = parseImportCsv(content);
 
   if (rows.length === 0) {
-    uploadError.value = 'CSV file does not contain any data.';
+    uploadError.value = t('upload.errors.emptyCsv');
     return;
   }
 
@@ -85,7 +90,7 @@ function handleFileSelected(files: File[]) {
 }
 
 function handleFileRejected(rejections: FileDropzoneRejection[]) {
-  uploadError.value = rejections[0]?.message ?? 'File could not be selected.';
+  uploadError.value = rejections[0]?.message ?? t('upload.errors.fileSelectionFailed');
 }
 
 watch(
@@ -104,7 +109,7 @@ watch(
     <div class="import-workspace">
       <aside class="target-panel" aria-labelledby="target-entitlement-title">
         <div class="target-panel__header">
-          <h1 id="target-entitlement-title">Target entitlement</h1>
+          <h1 id="target-entitlement-title">{{ t('upload.targetEntitlement') }}</h1>
         </div>
 
         <div class="target-panel__body">
@@ -114,31 +119,33 @@ watch(
             :open="productMenuOpen"
             :options="productOptions"
             :query="productQuery"
-            label="Product"
-            placeholder="Search product or entitlement"
+            :label="t('common.labels.product')"
+            :placeholder="t('upload.searchProductOrEntitlement')"
             @update:model-value="handleProductChange"
             @update:open="handleProductMenuOpenChange"
             @update:query="handleProductQueryChange"
           />
 
-          <p v-if="store.productsLoading" class="target-state">Loading available products...</p>
+          <p v-if="store.productsLoading" class="target-state">
+            {{ t('upload.loadingProducts') }}
+          </p>
           <div v-else-if="store.productsError" class="target-state target-state--error">
             <span>{{ store.productsError }}</span>
             <button class="target-state__action" type="button" @click="retryLoadProducts">
-              Retry
+              {{ t('common.actions.retry') }}
             </button>
           </div>
           <p v-else-if="!hasProducts" class="target-state">
-            No available products for this organization.
+            {{ t('upload.noProducts') }}
           </p>
 
           <dl class="target-details" v-if="selectedProduct">
             <div>
-              <dt>Entitlement</dt>
+              <dt>{{ t('common.labels.entitlement') }}</dt>
               <dd>{{ selectedProduct.entitlementCode }}</dd>
             </div>
             <div>
-              <dt>Seats</dt>
+              <dt>{{ t('upload.seats') }}</dt>
               <dd>
                 {{ selectedProduct.allocatedQuantity }} / {{ selectedProduct.purchasedQuantity }}
               </dd>
@@ -151,11 +158,11 @@ watch(
         <FileDropzone
           v-model="selectedFiles"
           accept=".csv,text/csv"
-          browse-label="Choose CSV"
-          description="Preview and validate entitlement changes before starting the import."
+          :browse-label="t('upload.chooseCsv')"
+          :description="t('upload.dropCsvDescription')"
           :error="uploadError ?? undefined"
           :max-size="maxCsvSize"
-          title="Drop CSV here or choose a file"
+          :title="t('upload.dropCsvTitle')"
           @reject="handleFileRejected"
           @select="handleFileSelected"
         />

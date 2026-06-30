@@ -16,14 +16,17 @@ import {
 } from '@hugo-ui/shadcn-vue';
 import { ArrowLeft } from '@lucide/vue';
 import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { buildReviewChartsPayload } from '@/features/importer/importer-chart-data';
 import type { ImportCsvRow, ImportRowStatus } from '@/features/importer/importer-types';
 import { useIdentitySessionStore } from '@/shared/stores/identity-session-store';
 import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
+import { createImporterChartDataCopy } from '@/shared/i18n/chart-copy';
 
 const router = useRouter();
+const { t, te } = useI18n();
 const store = useImportWorkflowStore();
 const identityStore = useIdentitySessionStore();
 const reviewChartsWindowOpen = ref(false);
@@ -41,22 +44,22 @@ const statusTone: Record<ImportRowStatus, 'success' | 'warning' | 'danger' | 'ne
   warning: 'warning',
 };
 
-const actionOptions: SelectOption[] = [
-  { value: 'assign', label: 'assign' },
-  { value: 'revoke', label: 'revoke' },
-];
+const actionOptions = computed<SelectOption[]>(() => [
+  { value: 'assign', label: t('common.actionsByValue.assign') },
+  { value: 'revoke', label: t('common.actionsByValue.revoke') },
+]);
 
-const statusFilterOptions: SelectOption[] = [
-  { value: 'all', label: 'All' },
-  { value: 'ready', label: 'Ready' },
-  { value: 'warning', label: 'Warning' },
-  { value: 'needsConfirmation', label: 'Needs confirmation' },
-  { value: 'blocked', label: 'Blocked' },
-  { value: 'skipped', label: 'Skipped' },
-  { value: 'success', label: 'Success' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'deleted', label: 'Deleted' },
-];
+const statusFilterOptions = computed<SelectOption[]>(() => [
+  { value: 'all', label: t('history.allStatuses') },
+  { value: 'ready', label: t('common.status.ready') },
+  { value: 'warning', label: t('common.status.warning') },
+  { value: 'needsConfirmation', label: t('common.status.needsConfirmation') },
+  { value: 'blocked', label: t('common.status.blocked') },
+  { value: 'skipped', label: t('common.status.skipped') },
+  { value: 'success', label: t('common.status.success') },
+  { value: 'failed', label: t('common.status.failed') },
+  { value: 'deleted', label: t('common.status.deleted') },
+]);
 
 const filteredRows = computed(() => {
   if (store.rowStatusFilter === 'all') {
@@ -66,33 +69,38 @@ const filteredRows = computed(() => {
   return store.rows.filter((row) => row.status === store.rowStatusFilter);
 });
 const reviewChartsPayload = computed(() =>
-  buildReviewChartsPayload({
-    rows: store.rows,
-    fileName: store.importedFile?.name,
-    entitlement: store.selectedEntitlement,
-    job: store.currentJob,
-  })
+  buildReviewChartsPayload(
+    {
+      rows: store.rows,
+      fileName: store.importedFile?.name,
+      entitlement: store.selectedEntitlement,
+      job: store.currentJob,
+    },
+    createImporterChartDataCopy((key, named) => t(key, named ?? {}))
+  )
 );
 const actionButtonLabel = computed(() => {
   if (store.backendBusy) {
     if (store.creatingJob) {
-      return 'Creating job';
+      return t('review.actionButton.createJob');
     }
 
     if (store.validatingJob) {
-      return 'Validating rows';
+      return t('review.actionButton.validatingRows');
     }
 
     if (store.committingJob) {
-      return 'Starting import';
+      return t('review.actionButton.startingImport');
     }
   }
 
   if (store.validationComplete && store.currentJob?.canConfirmImportRows) {
-    return 'Confirm and start import';
+    return t('review.actionButton.confirmAndStart');
   }
 
-  return store.validationComplete ? 'Start import' : 'Validate with backend';
+  return store.validationComplete
+    ? t('review.actionButton.startImport')
+    : t('review.actionButton.validateBackend');
 });
 const actionButtonDisabled = computed(() => {
   if (store.backendBusy || !identityStore.hasUsableEntitlementScope) {
@@ -110,7 +118,13 @@ const jobSummary = computed(() => {
     return null;
   }
 
-  return `${store.currentJob.status} · ${store.currentJob.readyRows} ready · ${store.currentJob.needsConfirmationRows} needs confirmation · ${store.currentJob.blockedRows} blocked · ${store.currentJob.skippedRows} skipped`;
+  return `${formatStatusLabel(store.currentJob.status)} · ${store.currentJob.readyRows} ${t(
+    'common.status.ready'
+  )} · ${store.currentJob.needsConfirmationRows} ${t(
+    'common.counts.needsConfirmation'
+  )} · ${store.currentJob.blockedRows} ${t('common.counts.blocked')} · ${
+    store.currentJob.skippedRows
+  } ${t('common.counts.skipped')}`;
 });
 const backendValidationFailed = computed(
   () => store.currentJob?.status === 'failed' || store.currentJob?.status === 'cancelled'
@@ -124,36 +138,36 @@ const validationResultModalType = computed<ModalType>(() => {
 });
 const validationResultTitle = computed(() => {
   if (store.apiError) {
-    return 'Import request failed';
+    return t('review.validation.importRequestFailed');
   }
 
   if (backendValidationFailed.value) {
-    return 'Backend validation failed';
+    return t('review.validation.backendFailed');
   }
 
-  return 'Backend validation complete';
+  return t('review.validation.backendComplete');
 });
 const validationResultSubtitle = computed(() => {
   if (store.apiError) {
-    return 'The backend could not validate this import.';
+    return t('review.validation.importRequestFailedDescription');
   }
 
   if (backendValidationFailed.value) {
-    return 'The backend returned a terminal status before the import could continue.';
+    return t('review.validation.backendFailedDescription');
   }
 
   if (store.canCommit) {
     if (store.currentJob?.canConfirmImportRows) {
-      return 'Confirm these rows to create or join organization users and start import.';
+      return t('review.validation.confirmRowsDescription');
     }
 
-    return 'Rows are ready to start import.';
+    return t('review.validation.readyDescription');
   }
 
-  return 'Review and fix blocked rows before starting import.';
+  return t('review.validation.reviewBlockedDescription');
 });
 const validationResultMessage = computed(
-  () => store.apiError ?? jobSummary.value ?? 'Validation finished.'
+  () => store.apiError ?? jobSummary.value ?? t('review.validation.validationFinished')
 );
 const validationResultStats = computed(() => {
   const job = store.currentJob;
@@ -163,23 +177,46 @@ const validationResultStats = computed(() => {
   }
 
   return [
-    { label: 'Ready', value: job.readyRows },
-    { label: 'Needs confirmation', value: job.needsConfirmationRows },
-    { label: 'Blocked', value: job.blockedRows },
-    { label: 'Skipped', value: job.skippedRows },
+    { label: t('common.status.ready'), value: job.readyRows },
+    { label: t('common.status.needsConfirmation'), value: job.needsConfirmationRows },
+    { label: t('common.status.blocked'), value: job.blockedRows },
+    { label: t('common.status.skipped'), value: job.skippedRows },
   ];
 });
 const validationResultPrimaryLabel = computed(() => {
   if (store.apiError || backendValidationFailed.value) {
-    return 'Close';
+    return t('common.actions.close');
   }
 
   if (store.currentJob?.canConfirmImportRows) {
-    return 'Confirm and start import';
+    return t('review.actionButton.confirmAndStart');
   }
 
-  return store.canCommit ? 'Start import' : 'Review rows';
+  return store.canCommit ? t('review.actionButton.startImport') : t('review.validation.reviewRows');
 });
+
+function humanizeValue(value: string): string {
+  return value
+    .replace(/([A-Z])/g, ' $1')
+    .replaceAll('_', ' ')
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function translateKnown(key: string, fallback: string): string {
+  return te(key) ? t(key) : fallback;
+}
+
+function formatStatusLabel(status: string): string {
+  return translateKnown(`common.status.${status}`, humanizeValue(status));
+}
+
+function getIssueLabel(code: string): string {
+  return translateKnown(`importer.chartData.issues.${code}`, humanizeValue(code));
+}
+
+function getIssueMessage(issue: { code: string; message: string }): string {
+  return translateKnown(`importer.issueMessages.${issue.code}`, issue.message);
+}
 
 function hasIssue(row: ImportCsvRow, issuePrefix: string) {
   return row.issues.some((issue) => issue.code.includes(issuePrefix));
@@ -191,7 +228,7 @@ function updateStatusFilter(value: string | number | null) {
 
 async function startProcess() {
   if (!identityStore.selectedEntitlementOrganizationId) {
-    store.apiError = 'Select an active entitlement organization before importing.';
+    store.apiError = t('review.selectedOrgRequired');
     validationResultModalOpen.value = true;
     return;
   }
@@ -232,11 +269,11 @@ function getRowId(row: unknown) {
 const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
   {
     id: 'status',
-    header: 'Status',
+    header: t('common.labels.status'),
     width: 112,
     render: (row) =>
       h(StatusBadge, {
-        label: row.status,
+        label: formatStatusLabel(row.status),
         showDot: true,
         size: 'sm',
         status: row.status,
@@ -245,7 +282,7 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
   },
   {
     id: 'email',
-    header: 'Email',
+    header: t('common.labels.email'),
     grow: true,
     minWidth: 280,
     render: (row) =>
@@ -260,7 +297,7 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
   },
   {
     id: 'name',
-    header: 'Name',
+    header: t('common.labels.name'),
     minWidth: 180,
     render: (row) =>
       h(Input, {
@@ -272,7 +309,7 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
   },
   {
     id: 'department',
-    header: 'Department',
+    header: t('common.labels.department'),
     minWidth: 180,
     render: (row) =>
       h(Input, {
@@ -284,15 +321,15 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
   },
   {
     id: 'action',
-    header: 'Action',
+    header: t('common.labels.action'),
     width: 132,
     render: (row) =>
       h(Select, {
         class: '!w-full',
         disabled: row.deleted,
         modelValue: row.action,
-        options: actionOptions,
-        placeholder: 'Action',
+        options: actionOptions.value,
+        placeholder: t('common.labels.action'),
         size: 'sm',
         status: hasIssue(row, 'action') ? 'error' : 'default',
         'onUpdate:modelValue': (value: string | number | null) =>
@@ -301,7 +338,7 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
   },
   {
     id: 'issues',
-    header: 'Issues',
+    header: t('common.labels.issues'),
     width: 200,
     minWidth: 200,
     maxWidth: 200,
@@ -309,7 +346,7 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
     render: (row) =>
       row.issues.length === 0
         ? h(StatusBadge, {
-            label: 'None',
+            label: t('common.labels.none'),
             size: 'sm',
             status: 'ready',
             tone: 'neutral',
@@ -321,11 +358,11 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
             row.issues.map((issue) =>
               h(StatusBadge, {
                 key: issue.code,
-                label: issue.code,
+                label: getIssueLabel(issue.code),
                 showDot: true,
                 size: 'sm',
                 status: issue.severity,
-                title: issue.message,
+                title: getIssueMessage(issue),
                 tone: issue.severity === 'blocked' ? 'danger' : 'warning',
               })
             )
@@ -333,7 +370,7 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
   },
   {
     id: 'operation',
-    header: 'Operation',
+    header: t('common.labels.action'),
     width: 132,
     minWidth: 132,
     maxWidth: 132,
@@ -350,7 +387,7 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
           onClick: () =>
             row.deleted ? store.undoRowDeleted(row.id) : store.markRowDeleted(row.id),
         },
-        () => (row.deleted ? 'Undo' : 'Delete')
+        () => (row.deleted ? t('common.actions.undo') : t('common.actions.delete'))
       ),
   },
 ]);
@@ -384,12 +421,14 @@ onUnmounted(() => {
       <Card>
         <CardContent>
           <EmptyState
-            description="Choose a CSV file before reviewing imported rows."
-            title="No CSV loaded"
+            :description="t('review.emptyState.description')"
+            :title="t('review.emptyState.title')"
             variant="page"
           >
             <template #action>
-              <Button type="button" @click="router.push('/import/upload')">Go to upload</Button>
+              <Button type="button" @click="router.push('/import/upload')">
+                {{ t('review.emptyState.action') }}
+              </Button>
             </template>
           </EmptyState>
         </CardContent>
@@ -401,18 +440,15 @@ onUnmounted(() => {
         <button
           class="review-back-button"
           type="button"
-          aria-label="Back to upload"
-          title="Back to upload"
+          :aria-label="t('review.backToUpload')"
+          :title="t('review.backToUpload')"
           @click="router.push('/import/upload')"
         >
           <ArrowLeft :size="24" aria-hidden="true" />
         </button>
         <div class="review-header__copy">
-          <h1>Review and edit rows</h1>
-          <p>
-            Duplicate detection uses lowercased email only. Conflicting assign/revoke rows are
-            blocked until fixed or deleted.
-          </p>
+          <h1>{{ t('review.headerTitle') }}</h1>
+          <p>{{ t('review.headerDescription') }}</p>
         </div>
         <div class="review-actions">
           <Button type="button" :disabled="actionButtonDisabled" @click="startProcess">
@@ -427,12 +463,12 @@ onUnmounted(() => {
             {{ store.importedFile?.name }}
           </span>
           <button class="review-impact-link" type="button" @click="openChartsWindow">
-            View import impact
+            {{ t('review.chartLink') }}
           </button>
         </div>
         <Select
           class="status-filter-select"
-          label="Rows"
+          :label="t('review.rowsFilterLabel')"
           :model-value="store.rowStatusFilter"
           :options="statusFilterOptions"
           size="sm"
@@ -442,19 +478,19 @@ onUnmounted(() => {
 
       <div class="review-table-panel">
         <DataGrid
-          ariaLabel="Imported entitlement rows"
+          :ariaLabel="t('review.dataGridLabel')"
           :columns="dataGridColumns"
           :rows="filteredRows"
           :get-row-id="getRowId"
           fill
           :row-height="68"
-          empty="No rows match the current filter."
+          :empty="t('review.emptyFilter')"
         />
       </div>
 
       <Modal
         v-model:open="validationResultModalOpen"
-        aria-label="Backend validation result"
+        :aria-label="t('review.backendValidationResult')"
         class="validation-result-modal"
         :class-names="{
           overlay: 'validation-result-modal__overlay',
@@ -483,7 +519,7 @@ onUnmounted(() => {
               type="button"
               @click="validationResultModalOpen = false"
             >
-              Keep reviewing
+              {{ t('review.keepReviewing') }}
             </Button>
             <Button type="button" @click="handleValidationResultPrimaryAction">
               {{ validationResultPrimaryLabel }}

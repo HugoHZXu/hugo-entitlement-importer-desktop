@@ -5,8 +5,8 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import './styles.css';
 import { router } from '@/routes/router';
-import { applyAppLanguage, readStoredAppLanguage } from '@/shared/preferences/language-preference';
+import { i18n, syncAppLanguage } from '@/shared/i18n';
 
-applyAppLanguage(readStoredAppLanguage());
+syncAppLanguage();
 
-createApp(App).use(createPinia()).use(VueQueryPlugin).use(router).mount('#app');
+createApp(App).use(createPinia()).use(VueQueryPlugin).use(i18n).use(router).mount('#app');

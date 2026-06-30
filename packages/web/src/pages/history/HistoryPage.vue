@@ -17,6 +17,7 @@ import {
 } from '@hugo-ui/shadcn-vue';
 import { RefreshCw } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { RouterLink, useRouter } from 'vue-router';
 
 import { listBulkImportJobs } from '@/shared/api/client';
@@ -26,6 +27,7 @@ import type { BulkImportJob, BulkImportJobStatus, PageResult } from '@/shared/ty
 type HistoryStatusFilter = 'all' | BulkImportJobStatus;
 
 const router = useRouter();
+const { t, te, locale } = useI18n();
 const identityStore = useIdentitySessionStore();
 const jobs = ref<BulkImportJob[]>([]);
 const loading = ref(false);
@@ -36,15 +38,15 @@ const totalElements = ref(0);
 const statusFilter = ref<HistoryStatusFilter>('all');
 let loadRequestId = 0;
 
-const statusFilterOptions: SelectOption[] = [
-  { value: 'all', label: 'All statuses' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'completedWithErrors', label: 'Completed with errors' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'cancelled', label: 'Cancelled' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'validating', label: 'Validating' },
-];
+const statusFilterOptions = computed<SelectOption[]>(() => [
+  { value: 'all', label: t('history.allStatuses') },
+  { value: 'completed', label: t('common.status.completed') },
+  { value: 'completedWithErrors', label: t('common.status.completedWithErrors') },
+  { value: 'failed', label: t('common.status.failed') },
+  { value: 'cancelled', label: t('common.status.cancelled') },
+  { value: 'processing', label: t('common.status.processing') },
+  { value: 'validating', label: t('common.status.validating') },
+]);
 
 const currentPage = computed({
   get: () => pageNumber.value + 1,
@@ -60,7 +62,7 @@ const lastVisibleItem = computed(() =>
   Math.min((pageNumber.value + 1) * pageSize, totalElements.value)
 );
 const selectedOrganizationName = computed(
-  () => identityStore.activeEntitlementOrganization?.name ?? 'Selected organization'
+  () => identityStore.activeEntitlementOrganization?.name ?? t('identity.selectedOrganization')
 );
 
 watch(
@@ -93,7 +95,7 @@ async function loadHistory() {
   if (!organizationId) {
     jobs.value = [];
     totalElements.value = 0;
-    loadError.value = 'Select an active entitlement organization before viewing history.';
+    loadError.value = t('history.selectedOrganizationRequired');
     return;
   }
 
@@ -125,7 +127,7 @@ async function loadHistory() {
 
     jobs.value = [];
     totalElements.value = 0;
-    loadError.value = error instanceof Error ? error.message : 'Import history could not be loaded.';
+    loadError.value = error instanceof Error ? error.message : t('errors.importHistoryLoadFailed');
   } finally {
     if (requestId === loadRequestId) {
       loading.value = false;
@@ -143,7 +145,7 @@ function openHistoryDetail(jobId: string) {
 
 function formatDateTime(value: string | null): string {
   if (!value) {
-    return 'Not available';
+    return t('common.missing.notAvailable');
   }
 
   const date = new Date(value);
@@ -152,10 +154,23 @@ function formatDateTime(value: string | null): string {
     return value;
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale.value, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date);
+}
+
+function humanizeValue(value: string): string {
+  return value
+    .replace(/([A-Z])/g, ' $1')
+    .replaceAll('_', ' ')
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function formatStatusLabel(status: BulkImportJobStatus): string {
+  const key = `common.status.${status}`;
+
+  return te(key) ? t(key) : humanizeValue(status);
 }
 
 function getJobStatusTone(status: BulkImportJobStatus): StatusBadgeTone {
@@ -186,15 +201,15 @@ function getCompletedAt(job: BulkImportJob): string {
   <section class="history-screen">
     <header class="history-header">
       <div class="history-header__copy">
-        <p class="eyebrow">Import history</p>
-        <h1>Import History</h1>
+        <p class="eyebrow">{{ t('history.importHistory') }}</p>
+        <h1>{{ t('history.importHistory') }}</h1>
         <p>{{ selectedOrganizationName }}</p>
       </div>
 
       <div class="history-header__actions">
         <Select
           class="history-status-filter"
-          label="Status"
+          :label="t('history.statusLabel')"
           :model-value="statusFilter"
           :options="statusFilterOptions"
           size="sm"
@@ -202,36 +217,36 @@ function getCompletedAt(job: BulkImportJob): string {
         />
         <Button type="button" variant="outline" :disabled="loading" @click="refreshHistory">
           <RefreshCw :size="16" aria-hidden="true" />
-          Refresh
+          {{ t('history.refresh') }}
         </Button>
       </div>
     </header>
 
     <div v-if="loadError" class="workflow-message error">
-      <strong>History unavailable</strong>
+      <strong>{{ t('history.unavailable') }}</strong>
       <span>{{ loadError }}</span>
     </div>
 
     <div v-else-if="loading && jobs.length === 0" class="workflow-message">
-      <strong>Loading history</strong>
-      <span>Fetching saved import jobs.</span>
+      <strong>{{ t('history.loadingTitle') }}</strong>
+      <span>{{ t('history.loadingDescription') }}</span>
     </div>
 
     <EmptyState
       v-else-if="jobs.length === 0"
-      description="Completed import jobs will appear here once the backend records them."
-      title="No imports yet"
+      :description="t('history.empty.description')"
+      :title="t('history.empty.title')"
       variant="section"
     >
       <template #action>
         <RouterLink to="/import/upload">
-          <Button type="button">Start import</Button>
+          <Button type="button">{{ t('history.empty.action') }}</Button>
         </RouterLink>
       </template>
     </EmptyState>
 
     <template v-else>
-      <div class="history-list" aria-label="Bulk import jobs">
+      <div class="history-list" :aria-label="t('history.bulkImportJobsLabel')">
         <button
           v-for="job in jobs"
           :key="job.id"
@@ -249,24 +264,29 @@ function getCompletedAt(job: BulkImportJob): string {
           <span class="history-card__stats">
             <span>
               <strong>{{ job.totalRows }}</strong>
-              <small>total</small>
+              <small>{{ t('common.counts.total') }}</small>
             </span>
             <span>
               <strong>{{ job.successRows }}</strong>
-              <small>success</small>
+              <small>{{ t('common.counts.success') }}</small>
             </span>
             <span>
               <strong>{{ job.skippedRows }}</strong>
-              <small>skipped</small>
+              <small>{{ t('common.counts.skipped') }}</small>
             </span>
             <span>
               <strong>{{ job.failedRows + job.blockedRows }}</strong>
-              <small>failed</small>
+              <small>{{ t('common.counts.failed') }}</small>
             </span>
           </span>
 
           <span class="history-card__side">
-            <StatusBadge :status="job.status" show-dot :tone="getJobStatusTone(job.status)" />
+            <StatusBadge
+              :label="formatStatusLabel(job.status)"
+              :status="job.status"
+              show-dot
+              :tone="getJobStatusTone(job.status)"
+            />
             <span>{{ getCompletedAt(job) }}</span>
           </span>
         </button>
@@ -274,13 +294,19 @@ function getCompletedAt(job: BulkImportJob): string {
 
       <footer class="history-pagination">
         <p>
-          Showing {{ firstVisibleItem }}-{{ lastVisibleItem }} of {{ totalElements }}
+          {{
+            t('history.showingItems', {
+              first: firstVisibleItem,
+              last: lastVisibleItem,
+              total: totalElements,
+            })
+          }}
         </p>
 
         <Pagination
           v-if="totalPages > 1"
           v-model:page="currentPage"
-          aria-label="Import history pages"
+          :aria-label="t('history.pagesLabel')"
           :items-per-page="pageSize"
           :sibling-count="1"
           show-edges

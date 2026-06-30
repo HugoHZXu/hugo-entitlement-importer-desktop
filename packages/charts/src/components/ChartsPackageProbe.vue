@@ -1,15 +1,38 @@
 <script setup lang="ts">
 import type { ChartOptions } from '@antv/g2';
+import { computed } from 'vue';
+
+import type { ChartsPackageProbeCopy } from '../types';
 
 const g2RuntimeLabel: keyof Pick<ChartOptions, 'container'> = 'container';
+
+const defaultCopy: ChartsPackageProbeCopy = {
+  ariaLabel: 'Charts package integration',
+  description:
+    'G2 type link checked through {runtimeLabel}. Real review and result charts will live in this package.',
+  eyebrow: 'Charts package',
+  title: 'Import analytics placeholder',
+};
+
+const props = defineProps<{
+  copy?: ChartsPackageProbeCopy;
+}>();
+const copy = computed(() => props.copy ?? defaultCopy);
+
+function formatCopy(template: string, named: Record<string, string | number>): string {
+  return Object.entries(named).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
+    template
+  );
+}
 </script>
 
 <template>
-  <section class="charts-probe" aria-label="Charts package integration">
+  <section class="charts-probe" :aria-label="copy.ariaLabel">
     <div>
-      <p class="charts-probe__eyebrow">Charts package</p>
-      <h3>Import analytics placeholder</h3>
-      <p>G2 type link checked through {{ g2RuntimeLabel }}. Real review and result charts will live in this package.</p>
+      <p class="charts-probe__eyebrow">{{ copy.eyebrow }}</p>
+      <h3>{{ copy.title }}</h3>
+      <p>{{ formatCopy(copy.description, { runtimeLabel: g2RuntimeLabel }) }}</p>
     </div>
   </section>
 </template>

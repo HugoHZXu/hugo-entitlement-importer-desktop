@@ -1,14 +1,51 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import type { ChartDatum, ReviewChartsPayload } from '../types';
+import type { ChartDatum, ReviewChartsPayload, ReviewImpactDashboardCopy } from '../types';
 import ChartPanel from './ChartPanel.vue';
 import G2BarChart from './G2BarChart.vue';
 import SeatOccupancyChart from './SeatOccupancyChart.vue';
 
+const defaultCopy: ReviewImpactDashboardCopy = {
+  blocked: 'blocked',
+  empty: 'Waiting for review data.',
+  eyebrow: 'Live import impact',
+  importableAfterConfirmation: 'importable after confirmation',
+  issueReasonsDescription: 'Warnings and blocked rows grouped by validation reason.',
+  issueReasonsTitle: 'Issue reasons',
+  needsConfirmation: 'needs confirmation',
+  noValidationIssues: 'No validation issues in the current review data.',
+  rowReadinessDescription: 'Ready, confirmable, skipped, and blocked rows from the current review data.',
+  rowReadinessTitle: 'Row readiness',
+  rows: 'Rows',
+  seat: {
+    currentOccupied: 'Current occupied',
+    noCapacityData: 'No seat capacity data',
+    occupiedPercent: '{percent}% occupied',
+    ofPurchased: 'of {purchased}',
+    plannedAssign: 'Planned assign',
+    plannedRevoke: 'Planned revoke',
+    projectedOccupied: 'Projected occupied',
+    remaining: 'Remaining',
+    remainingAfter: 'Remaining after',
+    seats: 'Seats',
+  },
+  seatProjectionBackend:
+    'Projected occupied and remaining seats from backend validation. Confirmable rows are included; capacity overflow is finalized during commit.',
+  seatProjectionLocal:
+    'Draft estimate from editable rows before backend validation. Final capacity projection appears after validation.',
+  seatProjectionTitle: 'Seat projection',
+  skipped: 'skipped',
+  title: 'Review current import plan',
+  updated: 'Updated {time}',
+};
+
 const props = defineProps<{
+  copy?: ReviewImpactDashboardCopy;
+  locale?: string;
   payload: ReviewChartsPayload | null;
 }>();
+const copy = computed(() => props.copy ?? defaultCopy);
 
 const issueChartData = computed<ChartDatum[]>(() =>
   (props.payload?.issueReasons ?? []).map((item) => ({
@@ -21,79 +58,88 @@ const issueChartData = computed<ChartDatum[]>(() =>
 );
 const seatProjectionDescription = computed(() =>
   props.payload?.seatProjectionSource === 'backendValidation'
-    ? 'Projected occupied and remaining seats from backend validation. Confirmable rows are included; capacity overflow is finalized during commit.'
-    : 'Draft estimate from editable rows before backend validation. Final capacity projection appears after validation.'
+    ? copy.value.seatProjectionBackend
+    : copy.value.seatProjectionLocal
 );
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(props.locale, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   }).format(new Date(value));
 }
+
+function formatCopy(template: string, named: Record<string, string | number>): string {
+  return Object.entries(named).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
+    template
+  );
+}
 </script>
 
 <template>
   <section class="impact-dashboard">
-    <div v-if="!payload" class="impact-dashboard__empty">Waiting for review data.</div>
+    <div v-if="!payload" class="impact-dashboard__empty">{{ copy.empty }}</div>
 
     <template v-else>
       <header class="impact-dashboard__header">
         <div>
-          <p class="impact-dashboard__eyebrow">Live import impact</p>
-          <h1>Review current import plan</h1>
+          <p class="impact-dashboard__eyebrow">{{ copy.eyebrow }}</p>
+          <h1>{{ copy.title }}</h1>
           <p>
             {{ payload.fileName }} · {{ payload.productName }} · {{ payload.entitlementCode }}
           </p>
         </div>
-        <div class="impact-dashboard__updated">Updated {{ formatTime(payload.updatedAt) }}</div>
+        <div class="impact-dashboard__updated">
+          {{ formatCopy(copy.updated, { time: formatTime(payload.updatedAt) }) }}
+        </div>
       </header>
 
       <div class="impact-dashboard__summary">
         <div>
           <span>{{ payload.summary.importableRows }}</span>
-          <small>importable after confirmation</small>
+          <small>{{ copy.importableAfterConfirmation }}</small>
         </div>
         <div>
           <span>{{ payload.summary.needsConfirmationRows }}</span>
-          <small>needs confirmation</small>
+          <small>{{ copy.needsConfirmation }}</small>
         </div>
         <div>
           <span>{{ payload.summary.skippedRows }}</span>
-          <small>skipped</small>
+          <small>{{ copy.skipped }}</small>
         </div>
         <div>
           <span>{{ payload.summary.blockedRows }}</span>
-          <small>blocked</small>
+          <small>{{ copy.blocked }}</small>
         </div>
       </div>
 
       <div class="impact-dashboard__grid">
         <ChartPanel
-          title="Row readiness"
-          description="Ready, confirmable, skipped, and blocked rows from the current review data."
+          :title="copy.rowReadinessTitle"
+          :description="copy.rowReadinessDescription"
         >
-          <G2BarChart :data="payload.statusDistribution" value-label="Rows" />
+          <G2BarChart :data="payload.statusDistribution" :value-label="copy.rows" />
         </ChartPanel>
 
         <ChartPanel
-          title="Seat projection"
+          :title="copy.seatProjectionTitle"
           :description="seatProjectionDescription"
         >
-          <SeatOccupancyChart :data="payload.seatImpact" />
+          <SeatOccupancyChart :data="payload.seatImpact" :copy="copy.seat" />
         </ChartPanel>
 
         <ChartPanel
-          title="Issue reasons"
-          description="Warnings and blocked rows grouped by validation reason."
+          :title="copy.issueReasonsTitle"
+          :description="copy.issueReasonsDescription"
           wide
         >
           <G2BarChart
             :data="issueChartData"
             :height="240"
-            value-label="Rows"
-            empty-message="No validation issues in the current review data."
+            :value-label="copy.rows"
+            :empty-message="copy.noValidationIssues"
           />
         </ChartPanel>
       </div>

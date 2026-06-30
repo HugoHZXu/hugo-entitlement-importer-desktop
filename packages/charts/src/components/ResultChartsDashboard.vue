@@ -1,14 +1,43 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import type { ChartDatum, ResultChartsPayload } from '../types';
+import type { ChartDatum, ResultChartsDashboardCopy, ResultChartsPayload } from '../types';
 import ChartPanel from './ChartPanel.vue';
 import G2BarChart from './G2BarChart.vue';
 import SeatOccupancyChart from './SeatOccupancyChart.vue';
 
+const defaultCopy: ResultChartsDashboardCopy = {
+  breakdownDescription: 'Committed, skipped, and failed rows.',
+  breakdownTitle: 'Result breakdown',
+  failed: 'failed',
+  issueReasonsDescription: 'Skipped and failed rows grouped by the reason shown to the operator.',
+  issueReasonsTitle: 'Issue reasons',
+  noIssueRows: 'No skipped or failed rows.',
+  processed: 'processed',
+  rows: 'Rows',
+  seat: {
+    currentOccupied: 'Current occupied',
+    noCapacityData: 'No seat capacity data',
+    occupiedPercent: '{percent}% occupied',
+    ofPurchased: 'of {purchased}',
+    plannedAssign: 'Planned assign',
+    plannedRevoke: 'Planned revoke',
+    projectedOccupied: 'Projected occupied',
+    remaining: 'Remaining',
+    remainingAfter: 'Remaining after',
+    seats: 'Seats',
+  },
+  seatImpactDescription: 'Final seat movement from committed rows.',
+  seatImpactTitle: 'Seat impact',
+  skipped: 'skipped',
+  success: 'success',
+};
+
 const props = defineProps<{
+  copy?: ResultChartsDashboardCopy;
   payload: ResultChartsPayload;
 }>();
+const copy = computed(() => props.copy ?? defaultCopy);
 
 const issueChartData = computed<ChartDatum[]>(() =>
   props.payload.issueReasons.map((item) => ({
@@ -26,41 +55,47 @@ const issueChartData = computed<ChartDatum[]>(() =>
     <div class="result-dashboard__summary">
       <div>
         <span>{{ payload.totals.successRows }}</span>
-        <small>success</small>
+        <small>{{ copy.success }}</small>
       </div>
       <div>
         <span>{{ payload.totals.skippedRows }}</span>
-        <small>skipped</small>
+        <small>{{ copy.skipped }}</small>
       </div>
       <div>
         <span>{{ payload.totals.failedRows }}</span>
-        <small>failed</small>
+        <small>{{ copy.failed }}</small>
       </div>
       <div>
         <span>{{ payload.totals.processedRows }}</span>
-        <small>processed</small>
+        <small>{{ copy.processed }}</small>
       </div>
     </div>
 
     <div class="result-dashboard__grid">
-      <ChartPanel title="Result breakdown" description="Committed, skipped, and failed rows.">
-        <G2BarChart :data="payload.resultBreakdown" value-label="Rows" />
-      </ChartPanel>
-
-      <ChartPanel title="Seat impact" description="Final seat movement from committed rows.">
-        <SeatOccupancyChart :data="payload.seatImpact" />
+      <ChartPanel
+        :title="copy.breakdownTitle"
+        :description="copy.breakdownDescription"
+      >
+        <G2BarChart :data="payload.resultBreakdown" :value-label="copy.rows" />
       </ChartPanel>
 
       <ChartPanel
-        title="Issue reasons"
-        description="Skipped and failed rows grouped by the reason shown to the operator."
+        :title="copy.seatImpactTitle"
+        :description="copy.seatImpactDescription"
+      >
+        <SeatOccupancyChart :data="payload.seatImpact" :copy="copy.seat" />
+      </ChartPanel>
+
+      <ChartPanel
+        :title="copy.issueReasonsTitle"
+        :description="copy.issueReasonsDescription"
         wide
       >
         <G2BarChart
           :data="issueChartData"
           :height="240"
-          value-label="Rows"
-          empty-message="No skipped or failed rows."
+          :value-label="copy.rows"
+          :empty-message="copy.noIssueRows"
         />
       </ChartPanel>
     </div>

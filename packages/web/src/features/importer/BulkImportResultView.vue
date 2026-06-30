@@ -2,6 +2,10 @@
 import type { ResultChartsPayload } from '@hugo-entitlement-importer/charts';
 import { ResultChartsDashboard } from '@hugo-entitlement-importer/charts';
 import { Button, StatusBadge, type StatusBadgeTone } from '@hugo-ui/shadcn-vue';
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+import { createResultChartsDashboardCopy } from '@/shared/i18n/chart-copy';
 
 const props = withDefaults(
   defineProps<{
@@ -19,11 +23,9 @@ const props = withDefaults(
   {
     canExport: false,
     exportError: null,
-    exportLabel: 'Export package (.zip)',
     exporting: false,
     primaryActionLabel: null,
     status: 'completed',
-    title: 'Import result',
     tone: 'success',
   }
 );
@@ -32,6 +34,12 @@ const emit = defineEmits<{
   export: [];
   primaryAction: [];
 }>();
+const { t } = useI18n();
+const resultChartsCopy = computed(() =>
+  createResultChartsDashboardCopy((key, named) => t(key, named ?? {}))
+);
+const exportButtonLabel = computed(() => props.exportLabel ?? t('result.exportLabel'));
+const titleText = computed(() => props.title ?? t('result.importResult'));
 </script>
 
 <template>
@@ -39,7 +47,7 @@ const emit = defineEmits<{
     <header class="result-header">
       <div class="result-title">
         <StatusBadge :label="statusLabel" show-dot :status="status" :tone="tone" />
-        <h1>{{ title }}</h1>
+        <h1>{{ titleText }}</h1>
       </div>
       <p class="result-file-name">{{ payload.fileName }}</p>
       <div class="result-actions">
@@ -57,15 +65,15 @@ const emit = defineEmits<{
         :disabled="!canExport || exporting"
         @click="emit('export')"
       >
-        {{ exporting ? 'Exporting package...' : exportLabel }}
+        {{ exporting ? t('result.exportingPackage') : exportButtonLabel }}
       </button>
     </header>
 
     <div v-if="exportError" class="workflow-message error">
-      <strong>Export failed</strong>
+      <strong>{{ t('result.exportFailed') }}</strong>
       <span>{{ exportError }}</span>
     </div>
 
-    <ResultChartsDashboard :payload="payload" />
+    <ResultChartsDashboard :payload="payload" :copy="resultChartsCopy" />
   </div>
 </template>

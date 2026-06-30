@@ -2,11 +2,26 @@
 import { Chart, type G2Spec } from '@antv/g2';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import type { SeatImpactData } from '../types';
+import type { SeatImpactData, SeatOccupancyChartCopy } from '../types';
+
+const defaultCopy: SeatOccupancyChartCopy = {
+  currentOccupied: 'Current occupied',
+  noCapacityData: 'No seat capacity data',
+  occupiedPercent: '{percent}% occupied',
+  ofPurchased: 'of {purchased}',
+  plannedAssign: 'Planned assign',
+  plannedRevoke: 'Planned revoke',
+  projectedOccupied: 'Projected occupied',
+  remaining: 'Remaining',
+  remainingAfter: 'Remaining after',
+  seats: 'Seats',
+};
 
 const props = defineProps<{
+  copy?: SeatOccupancyChartCopy;
   data: SeatImpactData;
 }>();
+const copy = computed(() => props.copy ?? defaultCopy);
 
 const chartContainer = ref<HTMLElement | null>(null);
 let chart: Chart | null = null;
@@ -23,12 +38,12 @@ const occupancyPercent = computed(() => {
 const chartData = computed(() => [
   {
     id: 'occupied',
-    label: 'Projected occupied',
+    label: copy.value.projectedOccupied,
     value: occupiedSeats.value,
   },
   {
     id: 'remaining',
-    label: 'Remaining',
+    label: copy.value.remaining,
     value: remainingSeats.value,
   },
 ]);
@@ -76,7 +91,7 @@ async function renderChart() {
     },
     tooltip: {
       title: 'label',
-      items: [{ field: 'value', name: 'Seats' }],
+      items: [{ field: 'value', name: copy.value.seats }],
     },
   };
 
@@ -92,7 +107,7 @@ onMounted(() => {
 });
 
 watch(
-  () => props.data,
+  () => [copy.value, props.data],
   () => {
     void renderChart();
   },
@@ -102,37 +117,46 @@ watch(
 onBeforeUnmount(() => {
   destroyChart();
 });
+
+function formatCopy(template: string, named: Record<string, string | number>): string {
+  return Object.entries(named).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
+    template
+  );
+}
 </script>
 
 <template>
   <div class="seat-occupancy">
-    <div v-if="!hasCapacityData" class="seat-occupancy__empty">No seat capacity data</div>
+    <div v-if="!hasCapacityData" class="seat-occupancy__empty">
+      {{ copy.noCapacityData }}
+    </div>
 
     <template v-else>
       <div class="seat-occupancy__chart">
         <div ref="chartContainer" class="seat-occupancy__canvas" />
         <div class="seat-occupancy__center">
           <strong>{{ occupiedSeats }}</strong>
-          <span>of {{ data.purchasedQuantity }}</span>
-          <small>{{ occupancyPercent }}% occupied</small>
+          <span>{{ formatCopy(copy.ofPurchased, { purchased: data.purchasedQuantity }) }}</span>
+          <small>{{ formatCopy(copy.occupiedPercent, { percent: occupancyPercent }) }}</small>
         </div>
       </div>
 
       <dl class="seat-occupancy__facts">
         <div>
-          <dt>Current occupied</dt>
+          <dt>{{ copy.currentOccupied }}</dt>
           <dd>{{ data.currentAllocated }}</dd>
         </div>
         <div>
-          <dt>Planned assign</dt>
+          <dt>{{ copy.plannedAssign }}</dt>
           <dd>+{{ data.plannedAssign }}</dd>
         </div>
         <div>
-          <dt>Planned revoke</dt>
+          <dt>{{ copy.plannedRevoke }}</dt>
           <dd>-{{ data.plannedRevoke }}</dd>
         </div>
         <div>
-          <dt>Remaining after</dt>
+          <dt>{{ copy.remainingAfter }}</dt>
           <dd>{{ remainingSeats }}</dd>
         </div>
       </dl>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import BulkImportResultView from '@/features/importer/BulkImportResultView.vue';
@@ -8,10 +9,12 @@ import {
   downloadBulkImportArtifactsZipUrl,
   getBulkImportHistoryDetail,
 } from '@/shared/api/client';
+import { createImporterChartDataCopy } from '@/shared/i18n/chart-copy';
 import type { BulkImportHistoryDetail, BulkImportJobStatus } from '@/shared/types';
 
 const route = useRoute();
 const router = useRouter();
+const { t, te } = useI18n();
 const detail = ref<BulkImportHistoryDetail | null>(null);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
@@ -25,11 +28,16 @@ const jobId = computed(() => {
   return Array.isArray(routeJobId) ? routeJobId[0] : routeJobId;
 });
 const resultChartsPayload = computed(() =>
-  detail.value ? buildHistoryDetailResultChartsPayload(detail.value) : null
+  detail.value
+    ? buildHistoryDetailResultChartsPayload(
+        detail.value,
+        createImporterChartDataCopy((key, named) => t(key, named ?? {}))
+      )
+    : null
 );
 const resultLabel = computed(() => {
   if (!detail.value) {
-    return 'Import result';
+    return t('result.importResult');
   }
 
   if (
@@ -37,11 +45,11 @@ const resultLabel = computed(() => {
     detail.value.resultSummary.reviewItemRows > 0 ||
     detail.value.resultSummary.failedOrBlockedRows > 0
   ) {
-    return 'Completed with review items';
+    return t('result.completedWithReviewItems');
   }
 
   if (detail.value.job.status === 'completed') {
-    return 'Completed';
+    return t('result.completed');
   }
 
   return formatStatusLabel(detail.value.job.status);
@@ -81,7 +89,7 @@ async function loadResultDetail() {
   const requestId = ++loadRequestId;
 
   if (!currentJobId) {
-    loadError.value = 'No import job was selected.';
+    loadError.value = t('result.noImportJobSelected');
     return;
   }
 
@@ -103,7 +111,7 @@ async function loadResultDetail() {
     }
 
     detail.value = null;
-    loadError.value = error instanceof Error ? error.message : 'Result detail could not be loaded.';
+    loadError.value = error instanceof Error ? error.message : t('errors.resultDetailLoadFailed');
   } finally {
     if (requestId === loadRequestId) {
       loading.value = false;
@@ -116,9 +124,11 @@ function backToHistory() {
 }
 
 function formatStatusLabel(status: BulkImportJobStatus): string {
-  return status
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, (letter) => letter.toUpperCase());
+  const key = `common.status.${status}`;
+
+  return te(key)
+    ? t(key)
+    : status.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function getResultPackageFileName() {
@@ -148,7 +158,7 @@ async function downloadResultPackage() {
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url));
   } catch (error) {
-    exportError.value = error instanceof Error ? error.message : 'Export failed.';
+    exportError.value = error instanceof Error ? error.message : t('errors.exportFailed');
   } finally {
     exportingPackage.value = false;
   }
@@ -158,12 +168,12 @@ async function downloadResultPackage() {
 <template>
   <section class="import-screen result-screen">
     <div v-if="loading" class="workflow-message">
-      <strong>Loading result</strong>
-      <span>Fetching the saved import summary.</span>
+      <strong>{{ t('result.loadingTitle') }}</strong>
+      <span>{{ t('result.loadingDescription') }}</span>
     </div>
 
     <div v-else-if="loadError" class="workflow-message error">
-      <strong>Result unavailable</strong>
+      <strong>{{ t('result.resultUnavailable') }}</strong>
       <span>{{ loadError }}</span>
     </div>
 
@@ -173,10 +183,10 @@ async function downloadResultPackage() {
       :export-error="exportError"
       :exporting="exportingPackage"
       :payload="resultChartsPayload"
-      primary-action-label="Back to history"
+      :primary-action-label="t('common.actions.backToHistory')"
       :status="detail.job.status"
       :status-label="resultLabel"
-      title="History detail"
+      :title="t('result.historyDetail')"
       :tone="resultTone"
       @export="downloadResultPackage"
       @primary-action="backToHistory"

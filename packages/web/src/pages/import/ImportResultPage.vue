@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import BulkImportResultView from '@/features/importer/BulkImportResultView.vue';
@@ -10,8 +11,10 @@ import {
 } from '@/shared/api/client';
 import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
 import type { BulkImportHistoryDetail } from '@/shared/types';
+import { createImporterChartDataCopy } from '@/shared/i18n/chart-copy';
 
 const router = useRouter();
+const { t } = useI18n();
 const store = useImportWorkflowStore();
 const detail = ref<BulkImportHistoryDetail | null>(null);
 const loading = ref(false);
@@ -20,7 +23,12 @@ const exportError = ref<string | null>(null);
 const exportingPackage = ref(false);
 
 const resultChartsPayload = computed(() =>
-  detail.value ? buildHistoryDetailResultChartsPayload(detail.value) : null
+  detail.value
+    ? buildHistoryDetailResultChartsPayload(
+        detail.value,
+        createImporterChartDataCopy((key, named) => t(key, named ?? {}))
+      )
+    : null
 );
 const hasReviewItems = computed(
   () =>
@@ -28,7 +36,7 @@ const hasReviewItems = computed(
     (detail.value?.resultSummary.failedOrBlockedRows ?? 0) > 0
 );
 const resultLabel = computed(() =>
-  hasReviewItems.value ? 'Completed with review items' : 'Completed'
+  hasReviewItems.value ? t('result.completedWithReviewItems') : t('result.completed')
 );
 const resultTone = computed(() => (hasReviewItems.value ? 'warning' : 'success'));
 const canExport = computed(
@@ -41,7 +49,7 @@ onMounted(() => {
 
 async function loadResultDetail() {
   if (!store.selectedJobId) {
-    loadError.value = 'No backend job is available for this result.';
+    loadError.value = t('result.noBackendJob');
     return;
   }
 
@@ -51,7 +59,7 @@ async function loadResultDetail() {
   try {
     detail.value = await getBulkImportHistoryDetail(store.selectedJobId);
   } catch (error) {
-    loadError.value = error instanceof Error ? error.message : 'Result detail could not be loaded.';
+    loadError.value = error instanceof Error ? error.message : t('errors.resultDetailLoadFailed');
   } finally {
     loading.value = false;
   }
@@ -90,7 +98,7 @@ async function downloadResultPackage() {
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url));
   } catch (error) {
-    exportError.value = error instanceof Error ? error.message : 'Export failed.';
+    exportError.value = error instanceof Error ? error.message : t('errors.exportFailed');
   } finally {
     exportingPackage.value = false;
   }
@@ -100,12 +108,12 @@ async function downloadResultPackage() {
 <template>
   <section class="import-screen result-screen">
     <div v-if="loading" class="workflow-message">
-      <strong>Loading result</strong>
-      <span>Fetching the saved import summary.</span>
+      <strong>{{ t('result.loadingTitle') }}</strong>
+      <span>{{ t('result.loadingDescription') }}</span>
     </div>
 
     <div v-else-if="loadError" class="workflow-message error">
-      <strong>Result unavailable</strong>
+      <strong>{{ t('result.resultUnavailable') }}</strong>
       <span>{{ loadError }}</span>
     </div>
 
@@ -115,7 +123,7 @@ async function downloadResultPackage() {
       :export-error="exportError"
       :exporting="exportingPackage"
       :payload="resultChartsPayload"
-      primary-action-label="Back home"
+      :primary-action-label="t('common.actions.backHome')"
       :status-label="resultLabel"
       :tone="resultTone"
       @export="downloadResultPackage"

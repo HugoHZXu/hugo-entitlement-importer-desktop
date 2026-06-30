@@ -20,6 +20,7 @@ import {
   listBulkImportJobRows,
   validateBulkImportJob,
 } from '@/shared/api/client';
+import { translate } from '@/shared/i18n';
 import type {
   BulkImportJobDetail,
   BulkImportJobRow,
@@ -81,7 +82,7 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return 'Bulk import request failed.';
+  return translate('errors.bulkImportRequestFailed');
 }
 
 function mapEntitlementToOption(product: Product, entitlement: ProductEntitlement): ProductOption {
@@ -359,19 +360,19 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
       const selectedProduct = this.selectedProduct;
 
       if (!selectedProduct || !this.importedFile) {
-        this.apiError = 'Select an entitlement and CSV file before validation.';
+        this.apiError = translate('importer.storeErrors.entitlementAndCsvRequired');
         return null;
       }
 
       if (!selectedProduct.entitlementId) {
-        this.apiError = 'The selected product does not include an entitlement id.';
+        this.apiError = translate('importer.storeErrors.entitlementIdMissing');
         return null;
       }
 
       const activeRows = this.rows.filter((row) => !row.deleted);
 
       if (activeRows.length === 0) {
-        this.apiError = 'The CSV does not contain active rows to import.';
+        this.apiError = translate('importer.storeErrors.activeRowsRequired');
         return null;
       }
 
@@ -414,17 +415,17 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
     },
     async commitCurrentImport(): Promise<BulkImportJobDetail | null> {
       if (!this.selectedJobId) {
-        this.apiError = 'Validate the import before starting commit.';
+        this.apiError = translate('importer.storeErrors.validateBeforeCommit');
         return null;
       }
 
       if (this.currentJob?.blockedRows && this.currentJob.blockedRows > 0) {
-        this.apiError = 'Review and fix blocked rows before starting import.';
+        this.apiError = translate('importer.storeErrors.blockedRowsBeforeCommit');
         return null;
       }
 
       if (!this.canCommit) {
-        this.apiError = 'The backend job is not ready to start import.';
+        this.apiError = translate('importer.storeErrors.backendJobNotReady');
         return null;
       }
 

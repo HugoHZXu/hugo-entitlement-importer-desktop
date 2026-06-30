@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { History, Settings, UploadCloud } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 
 import EntitlementAccessState from '@/features/identity/EntitlementAccessState.vue';
@@ -10,15 +11,16 @@ import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
 
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 const identityStore = useIdentitySessionStore();
 const importWorkflowStore = useImportWorkflowStore();
 const appInfo = ref<{ appVersion: string; platform: string } | null>(null);
 
-const navItems = [
-  { path: '/import/upload', label: 'Import', icon: UploadCloud, match: '/import' },
-  { path: '/history', label: 'History', icon: History, match: '/history' },
-  { path: '/settings', label: 'Settings', icon: Settings, match: '/settings' },
-];
+const navItems = computed(() => [
+  { path: '/import/upload', label: t('app.nav.import'), icon: UploadCloud, match: '/import' },
+  { path: '/history', label: t('app.nav.history'), icon: History, match: '/history' },
+  { path: '/settings', label: t('app.nav.settings'), icon: Settings, match: '/settings' },
+]);
 
 const activePath = computed(() => route.path);
 const isStandaloneRoute = computed(() => route.meta.layout === 'standalone');
@@ -116,8 +118,8 @@ watch(
   <RouterView v-if="isStandaloneRoute" />
 
   <div v-else class="app-shell">
-    <aside class="nav-rail" aria-label="Primary navigation">
-      <div class="rail-brand" aria-label="Hugo Entitlement Importer">
+    <aside class="nav-rail" :aria-label="t('app.nav.primary')">
+      <div class="rail-brand" :aria-label="t('app.brand')">
         <span>H</span>
       </div>
 
@@ -142,10 +144,10 @@ watch(
     <main class="main-panel">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Hugo Entitlement Importer</p>
+          <p class="eyebrow">{{ t('app.brand') }}</p>
           <p class="status-line">
             <span class="status-dot pending" aria-hidden="true"></span>
-            Local backend pending
+            {{ t('app.localBackendPending') }}
           </p>
         </div>
         <div class="topbar-actions">

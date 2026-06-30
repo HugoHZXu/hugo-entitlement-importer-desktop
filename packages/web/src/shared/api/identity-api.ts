@@ -1,4 +1,5 @@
 import { getIdentityServiceUrl } from '@/shared/config/identity-service';
+import { translate } from '@/shared/i18n';
 import type {
   DemoAccount,
   DemoAccountsResponse,
@@ -59,7 +60,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     throw new IdentityServiceError({
       status: response.status,
       code: errorPayload.error ?? null,
-      message: errorPayload.message ?? 'Identity service request failed.',
+      message: errorPayload.message ?? translate('errors.identityServiceRequestFailed'),
     });
   }
 
@@ -128,7 +129,7 @@ export async function fetchIdentitySession({
     throw new IdentityServiceError({
       status: 500,
       code: 'DEMO_ACCOUNT_LIST_EMPTY',
-      message: 'Identity service did not return any demo accounts.',
+      message: translate('errors.identityAccountListEmpty'),
     });
   }
 

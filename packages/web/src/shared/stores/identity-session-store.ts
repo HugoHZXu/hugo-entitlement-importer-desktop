@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 
 import { fetchIdentitySession } from '@/shared/api/identity-api';
+import { translate } from '@/shared/i18n';
 import {
   clearStoredAccountId,
   clearStoredEntitlementOrganizationId,
@@ -117,7 +118,7 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return 'Identity session unavailable.';
+  return translate('errors.identitySessionUnavailable');
 }
 
 function selectEntitlementOrganizationId(
@@ -228,7 +229,7 @@ export const useIdentitySessionStore = defineStore('identity-session', {
       this.errorMessage = null;
       this.noticeMessage =
         requestedAccountId && requestedAccountId !== session.currentAccount.id
-          ? 'Stored account was unavailable. The default demo account is selected.'
+          ? translate('identity.storedAccountUnavailable')
           : null;
 
       persistAccountId(session.currentAccount.id);

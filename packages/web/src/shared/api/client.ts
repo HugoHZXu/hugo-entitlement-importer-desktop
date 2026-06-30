@@ -1,5 +1,6 @@
 import { getCurrentIdentityAccessToken } from '@/shared/stores/identity-session-store';
 import { getEntitlementGraphqlUrl } from '@/shared/config/entitlement-service';
+import { translate } from '@/shared/i18n';
 import type {
   BulkImportHistoryDetail,
   BulkImportJob,
@@ -184,7 +185,9 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
   const payload = await readResponse(response);
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(payload, `Request failed with ${response.status}.`));
+    throw new Error(
+      getErrorMessage(payload, translate('errors.requestFailed', { status: response.status }))
+    );
   }
 
   return payload as T;
@@ -207,7 +210,9 @@ async function requestGraphql<TData, TVariables extends Record<string, unknown>>
   const payload = (await readResponse(response)) as GraphqlResponse<TData> | unknown;
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(payload, `GraphQL request failed with ${response.status}.`));
+    throw new Error(
+      getErrorMessage(payload, translate('errors.graphQlRequestFailed', { status: response.status }))
+    );
   }
 
   if (payload && typeof payload === 'object') {
@@ -218,7 +223,7 @@ async function requestGraphql<TData, TVariables extends Record<string, unknown>>
         graphqlPayload.errors
           .map((error) => error.message)
           .filter((message): message is string => Boolean(message))
-          .join('; ') || 'GraphQL request failed.'
+          .join('; ') || translate('errors.graphQlRequestFailed', { status: response.status })
       );
     }
 
@@ -227,7 +232,7 @@ async function requestGraphql<TData, TVariables extends Record<string, unknown>>
     }
   }
 
-  throw new Error('GraphQL response did not include data.');
+  throw new Error(translate('errors.graphQlResponseMissingData'));
 }
 
 async function requestText(path: string, init: RequestInit = {}): Promise<string> {
@@ -238,7 +243,9 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   const payload = await response.text();
 
   if (!response.ok) {
-    throw new Error(getErrorMessage(payload, `Request failed with ${response.status}.`));
+    throw new Error(
+      getErrorMessage(payload, translate('errors.requestFailed', { status: response.status }))
+    );
   }
 
   return payload;
@@ -253,7 +260,9 @@ async function requestBlob(path: string, init: RequestInit = {}): Promise<Blob> 
   if (!response.ok) {
     const payload = await readResponse(response);
 
-    throw new Error(getErrorMessage(payload, `Request failed with ${response.status}.`));
+    throw new Error(
+      getErrorMessage(payload, translate('errors.requestFailed', { status: response.status }))
+    );
   }
 
   return response.blob();

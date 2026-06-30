@@ -3,6 +3,7 @@ import { Badge } from '@hugo-ui/shadcn-vue';
 import { Check, ChevronsUpDown, RefreshCw, UserRound } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import {
   getManageableEntitlementOrganizations,
@@ -11,6 +12,7 @@ import {
 import type { DemoAccount, DemoOrganizationScope } from '@/shared/types';
 
 const identityStore = useIdentitySessionStore();
+const { t, te } = useI18n();
 const {
   accounts,
   currentAccount,
@@ -25,17 +27,17 @@ const rootRef = ref<HTMLElement | null>(null);
 const menuOpen = ref(false);
 const accountPickerOpen = ref(false);
 
-const accountLabel = computed(() => currentAccount.value?.displayName ?? 'Demo account');
+const accountLabel = computed(() => currentAccount.value?.displayName ?? t('identity.accountFallback'));
 const accountMeta = computed(() => {
   if (currentAccount.value?.email) {
     return currentAccount.value.email;
   }
 
   if (loading.value) {
-    return 'Loading identity';
+    return t('identity.loadingIdentity');
   }
 
-  return 'No account selected';
+  return t('identity.noAccountSelected');
 });
 const activeOrganization = computed(
   () =>
@@ -43,11 +45,20 @@ const activeOrganization = computed(
       (organization) => organization.id === selectedEntitlementOrganizationId.value
     ) ?? null
 );
-const organizationLabel = computed(() => activeOrganization.value?.name ?? 'No entitlement scope');
+const organizationLabel = computed(() => activeOrganization.value?.name ?? t('identity.noEntitlementScope'));
 const triggerDisabled = computed(() => loading.value || switching.value);
 
+function translateKnownValue(prefix: string, value: string): string {
+  const key = `${prefix}.${value}`;
+
+  return te(key) ? t(key) : value;
+}
+
 function formatOrganizationMeta(organization: DemoOrganizationScope): string {
-  return `${organization.kind} · ${organization.status}`;
+  return t('identity.organizationMeta', {
+    kind: translateKnownValue('identity.organizationKind', organization.kind),
+    status: translateKnownValue('common.status', organization.status),
+  });
 }
 
 function isInactiveAccount(account: DemoAccount): boolean {
@@ -62,14 +73,14 @@ function getEntitlementAccessSummary(account: DemoAccount): string {
   const manageableOrganizations = getManageableEntitlementOrganizations(account);
 
   if (manageableOrganizations.length === 0) {
-    return 'No entitlement import access';
+    return t('identity.noEntitlementImportAccess');
   }
 
   if (manageableOrganizations.length === 1) {
-    return manageableOrganizations[0]?.name ?? 'One entitlement organization';
+    return manageableOrganizations[0]?.name ?? t('identity.oneEntitlementOrganization');
   }
 
-  return `${manageableOrganizations.length} entitlement organizations`;
+  return t('identity.entitlementAccessCount', { count: manageableOrganizations.length });
 }
 
 function handleDocumentClick(event: MouseEvent) {
@@ -126,7 +137,7 @@ onBeforeUnmount(() => {
       class="identity-trigger"
       type="button"
       :disabled="triggerDisabled"
-      aria-label="Open account and organization menu"
+      :aria-label="t('identity.accountMenuLabel')"
       @click.stop="menuOpen = !menuOpen"
     >
       <span class="identity-trigger__icon" aria-hidden="true">
@@ -152,12 +163,12 @@ onBeforeUnmount(() => {
 
       <div class="identity-section">
         <div class="identity-section__header">
-          <span>Entitlement organization</span>
-          <small>Scope used by import requests</small>
+          <span>{{ t('identity.entitlementOrganization') }}</span>
+          <small>{{ t('identity.scopeDescription') }}</small>
         </div>
 
         <p v-if="entitlementOrganizations.length === 0" class="identity-empty">
-          No entitlement import access.
+          {{ t('identity.noEntitlementImportAccess') }}
         </p>
 
         <div v-else class="identity-option-list">
@@ -192,29 +203,34 @@ onBeforeUnmount(() => {
         >
           <UserRound :size="16" aria-hidden="true" />
           <span>
-            <span>Switch account</span>
-            <small>{{ accounts.length }} demo accounts available</small>
+            <span>{{ t('identity.switchAccount') }}</span>
+            <small>{{ t('identity.demoAccountsAvailable', { count: accounts.length }) }}</small>
           </span>
         </button>
         <button v-if="errorMessage" class="identity-action" type="button" @click="handleRetry">
           <RefreshCw :size="16" aria-hidden="true" />
           <span>
-            <span>Retry identity session</span>
-            <small>Reload accounts and token</small>
+            <span>{{ t('identity.retryIdentitySession') }}</span>
+            <small>{{ t('identity.reloadAccountsAndToken') }}</small>
           </span>
         </button>
       </div>
     </div>
 
     <div v-if="accountPickerOpen" class="identity-modal-backdrop" @click.self="accountPickerOpen = false">
-      <section class="identity-modal" aria-modal="true" role="dialog" aria-label="Switch demo account">
+      <section
+        class="identity-modal"
+        aria-modal="true"
+        role="dialog"
+        :aria-label="t('identity.accountPickerLabel')"
+      >
         <header class="identity-modal__header">
           <div>
-            <h2>Switch demo account</h2>
-            <p>Select the identity used for entitlement import requests.</p>
+            <h2>{{ t('identity.switchDemoAccount') }}</h2>
+            <p>{{ t('identity.selectIdentityDescription') }}</p>
           </div>
           <button class="identity-modal__close" type="button" @click="accountPickerOpen = false">
-            Close
+            {{ t('common.actions.close') }}
           </button>
         </header>
 
@@ -234,14 +250,14 @@ onBeforeUnmount(() => {
               <span class="identity-account__status">
                 <span>{{ account.persona }}</span>
                 <Badge v-if="isInactiveAccount(account)" tone="warning">
-                  {{ account.accountStatus }}
+                  {{ translateKnownValue('common.status', account.accountStatus) }}
                 </Badge>
               </span>
               <span class="identity-account__access">{{ getEntitlementAccessSummary(account) }}</span>
             </span>
             <span v-if="account.id === currentAccount?.id" class="identity-account__current">
               <Check :size="14" aria-hidden="true" />
-              Current
+              {{ t('identity.current') }}
             </span>
           </button>
         </div>

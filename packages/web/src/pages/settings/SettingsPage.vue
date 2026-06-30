@@ -1,50 +1,25 @@
 <script setup lang="ts">
 import { Select, type SelectOption, type SelectValue } from '@hugo-ui/shadcn-vue';
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 
-import {
-  applyAppLanguage,
-  isAppLanguage,
-  readStoredAppLanguage,
-  writeStoredAppLanguage,
-  type AppLanguage,
-} from '@/shared/preferences/language-preference';
+import { getAppLanguage, setAppLanguage } from '@/shared/i18n';
+import { isAppLanguage, type AppLanguage } from '@/shared/preferences/language-preference';
 
 const appVersion = ref<string | null>(null);
-const selectedLanguage = ref<AppLanguage>(readStoredAppLanguage());
+const { t } = useI18n();
+const selectedLanguage = computed<AppLanguage>(() => getAppLanguage());
 
 const languageOptions: SelectOption[] = [
   { value: 'zh-CN', label: '简体中文' },
   { value: 'en-US', label: 'English' },
 ];
 
-const copy = computed(() => {
-  if (selectedLanguage.value === 'en-US') {
-    return {
-      pageTitle: 'Settings',
-      pageDescription: 'Manage local desktop preferences.',
-      versionTitle: 'Version',
-      versionDescription: 'Installed application version:',
-      languageTitle: 'Language',
-      languageDescription: 'Change the interface language.',
-      loadingVersion: 'Loading',
-    };
-  }
-
-  return {
-    pageTitle: '设置',
-    pageDescription: '管理桌面端本地偏好。',
-    versionTitle: '版本',
-    versionDescription: '安装程序版本：',
-    languageTitle: '语言',
-    languageDescription: '更改界面语言。',
-    loadingVersion: '读取中',
-  };
-});
-
-const versionText = computed(() => appVersion.value ?? copy.value.loadingVersion);
+const versionText = computed(() => appVersion.value ?? t('settings.loadingVersion'));
 const versionTitle = computed(() =>
-  appVersion.value ? `${copy.value.versionTitle} ${appVersion.value}` : copy.value.versionTitle
+  appVersion.value
+    ? `${t('settings.versionTitle')} ${appVersion.value}`
+    : t('settings.versionTitle')
 );
 
 onMounted(async () => {
@@ -62,9 +37,7 @@ function handleLanguageChange(value: SelectValue | null) {
     return;
   }
 
-  selectedLanguage.value = nextLanguage;
-  writeStoredAppLanguage(nextLanguage);
-  applyAppLanguage(nextLanguage);
+  setAppLanguage(nextLanguage);
 }
 </script>
 
@@ -72,29 +45,29 @@ function handleLanguageChange(value: SelectValue | null) {
   <section class="settings-screen" aria-labelledby="settings-title">
     <div class="settings-content">
       <header class="settings-header">
-        <h1 id="settings-title">{{ copy.pageTitle }}</h1>
-        <p>{{ copy.pageDescription }}</p>
+        <h1 id="settings-title">{{ t('settings.pageTitle') }}</h1>
+        <p>{{ t('settings.pageDescription') }}</p>
       </header>
 
-      <section class="settings-list" :aria-label="copy.pageTitle">
+      <section class="settings-list" :aria-label="t('settings.pageTitle')">
         <div class="settings-row">
           <div class="settings-copy">
             <h2>{{ versionTitle }}</h2>
-            <p>{{ copy.versionDescription }}{{ versionText }}</p>
+            <p>{{ t('settings.versionDescription') }}{{ versionText }}</p>
           </div>
         </div>
 
         <div class="settings-row">
           <div class="settings-copy">
-            <h2>{{ copy.languageTitle }}</h2>
-            <p>{{ copy.languageDescription }}</p>
+            <h2>{{ t('settings.languageTitle') }}</h2>
+            <p>{{ t('settings.languageDescription') }}</p>
           </div>
 
           <Select
             class="language-select"
             :model-value="selectedLanguage"
             :options="languageOptions"
-            :placeholder="copy.languageTitle"
+            :placeholder="t('settings.languageTitle')"
             @update:model-value="handleLanguageChange"
           />
         </div>

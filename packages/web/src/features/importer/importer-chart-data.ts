@@ -33,35 +33,65 @@ interface ChartPayloadInput {
 
 type ReviewSummary = ReviewChartsPayload['summary'];
 
-const fallbackEntitlement: EntitlementSnapshot = {
-  name: 'Selected product',
-  entitlementCode: 'Selected entitlement',
-  purchasedQuantity: 0,
-  allocatedQuantity: 0,
-};
-
-const issueReasonLabels: Record<string, string> = {
-  missing_email: 'Missing email',
-  invalid_email: 'Invalid email',
-  invalid_action: 'Invalid action',
-  duplicate_email_in_file: 'Duplicate email',
-  conflicting_actions_in_file: 'Conflicting actions',
-  unregistered_user: 'Unregistered user',
-  user_not_in_organization: 'User outside organization',
-  membership_not_found: 'Membership not found',
-  entitlement_not_active: 'Entitlement inactive',
-  already_allocated: 'Already allocated',
-  not_allocated: 'Not allocated',
-  seat_limit_exceeded: 'Seat limit exceeded',
-  deleted_by_user: 'Deleted by user',
-};
-
-function getEntitlement(input: ChartPayloadInput) {
-  return input.entitlement ?? fallbackEntitlement;
+export interface ImporterChartDataCopy {
+  noFileSelected: string;
+  resultBreakdownLabels: Record<string, string>;
+  issueReasonLabels: Record<string, string>;
+  selectedEntitlement: string;
+  selectedProduct: string;
+  statusLabels: Record<string, string>;
 }
 
-function getFileName(input: ChartPayloadInput) {
-  return input.fileName?.trim() || 'No file selected';
+export const defaultImporterChartDataCopy: ImporterChartDataCopy = {
+  noFileSelected: 'No file selected',
+  resultBreakdownLabels: {
+    failed: 'Failed',
+    needsConfirmation: 'Needs confirmation',
+    skipped: 'Skipped',
+    success: 'Success',
+  },
+  issueReasonLabels: {
+    already_allocated: 'Already allocated',
+    conflicting_actions_in_file: 'Conflicting actions',
+    deleted_by_user: 'Deleted by user',
+    duplicate_email_in_file: 'Duplicate email',
+    entitlement_not_active: 'Entitlement inactive',
+    invalid_action: 'Invalid action',
+    invalid_email: 'Invalid email',
+    membership_not_found: 'Membership not found',
+    missing_email: 'Missing email',
+    not_allocated: 'Not allocated',
+    seat_limit_exceeded: 'Seat limit exceeded',
+    unregistered_user: 'Unregistered user',
+    user_not_in_organization: 'User outside organization',
+  },
+  selectedEntitlement: 'Selected entitlement',
+  selectedProduct: 'Selected product',
+  statusLabels: {
+    blocked: 'Blocked',
+    deleted: 'Deleted',
+    failed: 'Failed',
+    needsConfirmation: 'Needs confirmation',
+    ready: 'Ready',
+    skipped: 'Skipped',
+    success: 'Success',
+    warning: 'Warning',
+  },
+};
+
+function getEntitlement(input: ChartPayloadInput, copy: ImporterChartDataCopy) {
+  return (
+    input.entitlement ?? {
+      name: copy.selectedProduct,
+      entitlementCode: copy.selectedEntitlement,
+      purchasedQuantity: 0,
+      allocatedQuantity: 0,
+    }
+  );
+}
+
+function getFileName(input: ChartPayloadInput, copy: ImporterChartDataCopy) {
+  return input.fileName?.trim() || copy.noFileSelected;
 }
 
 function getCommittedRows(rows: ImportCsvRow[]) {
@@ -164,8 +194,8 @@ function getReviewSummary(rows: ImportCsvRow[], job?: BulkImportJobDetail | null
   };
 }
 
-function toReasonLabel(code: string) {
-  return issueReasonLabels[code] ?? code.replaceAll('_', ' ');
+function toReasonLabel(code: string, copy: ImporterChartDataCopy) {
+  return copy.issueReasonLabels[code] ?? code.replaceAll('_', ' ');
 }
 
 function toReasonSeverity(severity: string): 'warning' | 'blocked' | 'skipped' {
@@ -198,7 +228,11 @@ function getHistoryDetailUpdatedAt(detail: BulkImportHistoryDetail): string {
   );
 }
 
-function getIssueReasons(rows: ImportCsvRow[], includeDeletedReason: boolean): IssueReasonDatum[] {
+function getIssueReasons(
+  rows: ImportCsvRow[],
+  includeDeletedReason: boolean,
+  copy: ImporterChartDataCopy
+): IssueReasonDatum[] {
   const reasons = new Map<string, IssueReasonDatum>();
 
   for (const row of rows) {
@@ -216,7 +250,7 @@ function getIssueReasons(rows: ImportCsvRow[], includeDeletedReason: boolean): I
 
       reasons.set(issue.code, {
         code: issue.code,
-        label: toReasonLabel(issue.code),
+        label: toReasonLabel(issue.code, copy),
         count: 1,
         severity: toReasonSeverity(issue.severity),
       });
@@ -229,7 +263,7 @@ function getIssueReasons(rows: ImportCsvRow[], includeDeletedReason: boolean): I
     if (deletedRows > 0) {
       reasons.set('deleted_by_user', {
         code: 'deleted_by_user',
-        label: toReasonLabel('deleted_by_user'),
+        label: toReasonLabel('deleted_by_user', copy),
         count: deletedRows,
         severity: 'skipped',
       });
@@ -239,26 +273,29 @@ function getIssueReasons(rows: ImportCsvRow[], includeDeletedReason: boolean): I
   return Array.from(reasons.values()).sort((left, right) => right.count - left.count);
 }
 
-export function buildReviewChartsPayload(input: ChartPayloadInput): ReviewChartsPayload {
-  const entitlement = getEntitlement(input);
+export function buildReviewChartsPayload(
+  input: ChartPayloadInput,
+  copy: ImporterChartDataCopy = defaultImporterChartDataCopy
+): ReviewChartsPayload {
+  const entitlement = getEntitlement(input, copy);
   const summary = getReviewSummary(input.rows, input.job);
 
   const statusDistribution: ChartDatum[] = [
-    { id: 'ready', label: 'Ready', value: summary.readyRows, tone: 'success' },
+    { id: 'ready', label: copy.statusLabels.ready, value: summary.readyRows, tone: 'success' },
     {
       id: 'needsConfirmation',
-      label: 'Needs confirmation',
+      label: copy.statusLabels.needsConfirmation,
       value: summary.needsConfirmationRows,
       tone: 'info',
     },
-    { id: 'warning', label: 'Warning', value: summary.warningRows, tone: 'warning' },
-    { id: 'skipped', label: 'Skipped', value: summary.skippedRows, tone: 'neutral' },
-    { id: 'blocked', label: 'Blocked', value: summary.blockedRows, tone: 'danger' },
-    { id: 'deleted', label: 'Deleted', value: summary.deletedRows, tone: 'neutral' },
+    { id: 'warning', label: copy.statusLabels.warning, value: summary.warningRows, tone: 'warning' },
+    { id: 'skipped', label: copy.statusLabels.skipped, value: summary.skippedRows, tone: 'neutral' },
+    { id: 'blocked', label: copy.statusLabels.blocked, value: summary.blockedRows, tone: 'danger' },
+    { id: 'deleted', label: copy.statusLabels.deleted, value: summary.deletedRows, tone: 'neutral' },
   ];
 
   return {
-    fileName: getFileName(input),
+    fileName: getFileName(input, copy),
     productName: entitlement.name,
     entitlementCode: entitlement.entitlementCode,
     updatedAt: new Date().toISOString(),
@@ -275,29 +312,47 @@ export function buildReviewChartsPayload(input: ChartPayloadInput): ReviewCharts
     statusDistribution,
     seatImpact: calculateReviewSeatImpact(input, entitlement),
     seatProjectionSource: input.job ? 'backendValidation' : 'localEstimate',
-    issueReasons: getIssueReasons(input.rows, false),
+    issueReasons: getIssueReasons(input.rows, false, copy),
   };
 }
 
-export function buildResultChartsPayload(input: ChartPayloadInput): ResultChartsPayload {
-  const entitlement = getEntitlement(input);
+export function buildResultChartsPayload(
+  input: ChartPayloadInput,
+  copy: ImporterChartDataCopy = defaultImporterChartDataCopy
+): ResultChartsPayload {
+  const entitlement = getEntitlement(input, copy);
   const resultSummary = summarizeImportResult(input.rows);
   const rowSummary = summarizeImportRows(input.rows);
   const skippedRows = resultSummary.skippedRows + rowSummary.deletedRows;
 
   return {
-    fileName: getFileName(input),
+    fileName: getFileName(input, copy),
     jobId: input.jobId ?? null,
     productName: entitlement.name,
     entitlementCode: entitlement.entitlementCode,
     updatedAt: new Date().toISOString(),
     resultBreakdown: [
-      { id: 'success', label: 'Success', value: resultSummary.successRows, tone: 'success' },
-      { id: 'skipped', label: 'Skipped', value: skippedRows, tone: 'warning' },
-      { id: 'failed', label: 'Failed', value: resultSummary.failedRows, tone: 'danger' },
+      {
+        id: 'success',
+        label: copy.resultBreakdownLabels.success,
+        value: resultSummary.successRows,
+        tone: 'success',
+      },
+      {
+        id: 'skipped',
+        label: copy.resultBreakdownLabels.skipped,
+        value: skippedRows,
+        tone: 'warning',
+      },
+      {
+        id: 'failed',
+        label: copy.resultBreakdownLabels.failed,
+        value: resultSummary.failedRows,
+        tone: 'danger',
+      },
     ],
     seatImpact: calculateSeatImpact(input.rows, entitlement),
-    issueReasons: getIssueReasons(input.rows, true),
+    issueReasons: getIssueReasons(input.rows, true, copy),
     totals: {
       successRows: resultSummary.successRows,
       skippedRows,
@@ -308,7 +363,8 @@ export function buildResultChartsPayload(input: ChartPayloadInput): ResultCharts
 }
 
 export function buildHistoryDetailResultChartsPayload(
-  detail: BulkImportHistoryDetail
+  detail: BulkImportHistoryDetail,
+  copy: ImporterChartDataCopy = defaultImporterChartDataCopy
 ): ResultChartsPayload {
   return {
     fileName: detail.job.fileName,
@@ -318,7 +374,7 @@ export function buildHistoryDetailResultChartsPayload(
     updatedAt: getHistoryDetailUpdatedAt(detail),
     resultBreakdown: detail.resultBreakdown.map((item) => ({
       id: item.id,
-      label: item.label,
+      label: copy.resultBreakdownLabels[item.id] ?? item.label,
       value: item.count,
       tone: toResultBreakdownTone(item),
     })),
@@ -332,7 +388,7 @@ export function buildHistoryDetailResultChartsPayload(
     },
     issueReasons: detail.issueReasons.map((reason) => ({
       code: reason.code,
-      label: reason.message || toReasonLabel(reason.code),
+      label: copy.issueReasonLabels[reason.code] ?? (reason.message || toReasonLabel(reason.code, copy)),
       count: reason.rowCount,
       severity: toReasonSeverity(reason.severity),
     })),
