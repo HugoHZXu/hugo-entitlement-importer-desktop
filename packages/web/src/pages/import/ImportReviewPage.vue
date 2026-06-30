@@ -96,7 +96,7 @@ const actionButtonDisabled = computed(() => {
     return !store.canCommit;
   }
 
-  return !store.canSubmit;
+  return !store.canCreateBackendJob;
 });
 const jobSummary = computed(() => {
   if (!store.currentJob) {

@@ -15,11 +15,18 @@ import {
   commitBulkImportJob,
   createBulkImportJob,
   getBulkImportJob,
+  listEntitlements,
   listProducts,
   listBulkImportJobRows,
   validateBulkImportJob,
 } from '@/shared/api/client';
-import type { BulkImportJobDetail, BulkImportJobRow, BulkImportJobStatus, Product } from '@/shared/types';
+import type {
+  BulkImportJobDetail,
+  BulkImportJobRow,
+  BulkImportJobStatus,
+  Product,
+  ProductEntitlement,
+} from '@/shared/types';
 
 type ProductOption = {
   key: string;
@@ -33,69 +40,6 @@ type ProductOption = {
   entitlementStatus: string;
   productStatus: string;
 };
-
-const fallbackProductOptions: ProductOption[] = [
-  {
-    key: 'prod-insight-studio::ent-insight-studio-2026-001',
-    id: 'prod-insight-studio',
-    name: 'Insight Studio',
-    entitlementId: 'ent-insight-studio-2026-001',
-    entitlementCode: 'LIC-INSIGHT-STUDIO-2026',
-    purchasedQuantity: 75,
-    allocatedQuantity: 28,
-    availableQuantity: 47,
-    entitlementStatus: 'active',
-    productStatus: 'active',
-  },
-  {
-    key: 'prod-workflow-hub::ent-workflow-hub-2026-001',
-    id: 'prod-workflow-hub',
-    name: 'Workflow Hub',
-    entitlementId: 'ent-workflow-hub-2026-001',
-    entitlementCode: 'LIC-WORKFLOW-HUB-2026',
-    purchasedQuantity: 40,
-    allocatedQuantity: 1,
-    availableQuantity: 39,
-    entitlementStatus: 'active',
-    productStatus: 'active',
-  },
-  {
-    key: 'prod-access-monitor::ent-access-monitor-2026-001',
-    id: 'prod-access-monitor',
-    name: 'Access Monitor',
-    entitlementId: 'ent-access-monitor-2026-001',
-    entitlementCode: 'LIC-ACCESS-MONITOR-2026',
-    purchasedQuantity: 25,
-    allocatedQuantity: 1,
-    availableQuantity: 24,
-    entitlementStatus: 'scheduled',
-    productStatus: 'scheduled',
-  },
-  {
-    key: 'prod-insight-studio::ent-brightline-insight-studio-2026-001',
-    id: 'prod-insight-studio',
-    name: 'Insight Studio',
-    entitlementId: 'ent-brightline-insight-studio-2026-001',
-    entitlementCode: 'LIC-BRIGHTLINE-INSIGHT-2026',
-    purchasedQuantity: 20,
-    allocatedQuantity: 1,
-    availableQuantity: 19,
-    entitlementStatus: 'active',
-    productStatus: 'active',
-  },
-  {
-    key: 'prod-workflow-hub::ent-brightline-workflow-hub-2026-001',
-    id: 'prod-workflow-hub',
-    name: 'Workflow Hub',
-    entitlementId: 'ent-brightline-workflow-hub-2026-001',
-    entitlementCode: 'LIC-BRIGHTLINE-WORKFLOW-2026',
-    purchasedQuantity: 12,
-    allocatedQuantity: 1,
-    availableQuantity: 11,
-    entitlementStatus: 'active',
-    productStatus: 'active',
-  },
-];
 
 function createProductOptionKey(productId: string, entitlementId: string): string {
   return `${productId}::${entitlementId}`;
@@ -135,43 +79,33 @@ function getErrorMessage(error: unknown): string {
   return 'Bulk import request failed.';
 }
 
-function findFallbackProductOption(product: Product): ProductOption | undefined {
-  return (
-    fallbackProductOptions.find(
-      (option) =>
-        option.id === product.id && option.entitlementCode === product.entitlementInfo.entitlementCode
-    ) ?? fallbackProductOptions.find((option) => option.id === product.id)
-  );
-}
-
-function mapProductToOption(product: Product): ProductOption {
-  const fallback = findFallbackProductOption(product);
-  const entitlementId =
-    product.entitlementInfo.id ??
-    product.entitlementInfo.orgProductEntitlementId ??
-    fallback?.entitlementId ??
-    '';
-  const purchasedQuantity =
-    product.entitlementInfo.purchasedQuantity ?? fallback?.purchasedQuantity ?? 0;
-  const allocatedQuantity =
-    product.entitlementInfo.allocatedQuantity ?? fallback?.allocatedQuantity ?? 0;
-  const availableQuantity =
-    product.entitlementInfo.availableQuantity ??
-    fallback?.availableQuantity ??
-    Math.max(purchasedQuantity - allocatedQuantity, 0);
-
+function mapEntitlementToOption(product: Product, entitlement: ProductEntitlement): ProductOption {
   return {
-    allocatedQuantity,
-    availableQuantity,
-    entitlementCode: product.entitlementInfo.entitlementCode,
-    entitlementId,
-    entitlementStatus: product.entitlementInfo.status ?? fallback?.entitlementStatus ?? 'active',
+    allocatedQuantity: entitlement.allocatedQuantity,
+    availableQuantity: Math.max(entitlement.purchasedQuantity - entitlement.allocatedQuantity, 0),
+    entitlementCode: entitlement.entitlementCode,
+    entitlementId: entitlement.id,
+    entitlementStatus: entitlement.status,
     id: product.id,
-    key: createProductOptionKey(product.id, entitlementId),
+    key: createProductOptionKey(product.id, entitlement.id),
     name: product.name,
     productStatus: product.status,
-    purchasedQuantity,
+    purchasedQuantity: entitlement.purchasedQuantity,
   };
+}
+
+function hasCreateDtoInvalidSeatQuantity(row: ImportCsvRow): boolean {
+  return row.seatQuantity === null || !Number.isInteger(row.seatQuantity) || row.seatQuantity <= 0;
+}
+
+function getCreateDtoBlockedRows(rows: ImportCsvRow[]): ImportCsvRow[] {
+  return rows.filter((row) => !row.deleted && hasCreateDtoInvalidSeatQuantity(row));
+}
+
+function hasCreateReadySeatQuantity(
+  row: ImportCsvRow
+): row is ImportCsvRow & { seatQuantity: number } {
+  return !hasCreateDtoInvalidSeatQuantity(row);
 }
 
 function normalizeBackendRowStatus(status: BulkImportJobRow['status']): ImportRowStatus {
@@ -259,9 +193,14 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
     canReview(state) {
       return state.rows.length > 0;
     },
-    canSubmit(state) {
-      const summary = summarizeImportRows(state.rows);
-      return summary.readyRows > 0 && summary.blockedRows === 0;
+    canCreateBackendJob(state) {
+      const activeRows = state.rows.filter((row) => !row.deleted);
+
+      return (
+        Boolean(state.importedFile && state.selectedProductId && state.selectedEntitlementId) &&
+        activeRows.length > 0 &&
+        getCreateDtoBlockedRows(state.rows).length === 0
+      );
     },
     canCommit(state) {
       return Boolean(state.currentJob?.canCommit);
@@ -287,8 +226,7 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
       this.processStartedAt = null;
       this.processCompletedAt = null;
     },
-    applyAvailableProducts(products: Product[]) {
-      const options = products.map(mapProductToOption);
+    applyAvailableProducts(options: ProductOption[]) {
       const currentSelection =
         options.find(
           (product) =>
@@ -307,7 +245,20 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
 
       try {
         const products = await listProducts({ organizationId });
-        this.applyAvailableProducts(products);
+        const entitlementGroups = await Promise.all(
+          products.map(async (product) => ({
+            entitlements: await listEntitlements({
+              organizationId,
+              productId: product.id,
+            }),
+            product,
+          }))
+        );
+        const options = entitlementGroups.flatMap(({ entitlements, product }) =>
+          entitlements.map((entitlement) => mapEntitlementToOption(product, entitlement))
+        );
+
+        this.applyAvailableProducts(options);
 
         return this.products;
       } catch (error) {
@@ -405,11 +356,21 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
       }
 
       const activeRows = this.rows.filter((row) => !row.deleted);
+      const createBlockedRows = getCreateDtoBlockedRows(this.rows);
 
       if (activeRows.length === 0) {
         this.apiError = 'The CSV does not contain active rows to import.';
         return null;
       }
+
+      if (createBlockedRows.length > 0) {
+        this.apiError = `Fix invalid seat quantities before backend validation. Rows: ${createBlockedRows
+          .map((row) => row.rowNumber)
+          .join(', ')}.`;
+        return null;
+      }
+
+      const createRows = activeRows.filter(hasCreateReadySeatQuantity);
 
       this.creatingJob = true;
       this.validatingJob = false;
@@ -421,13 +382,13 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
           organizationId,
           orgProductEntitlementId: selectedProduct.entitlementId,
           productId: selectedProduct.id,
-          rows: activeRows.map((row) => ({
+          rows: createRows.map((row) => ({
             action: String(row.action || 'assign'),
             department: row.department,
             email: row.email,
             name: row.name,
             rowNumber: row.rowNumber,
-            seatQuantity: row.seatQuantity ?? 1,
+            seatQuantity: row.seatQuantity,
           })),
         });
 
@@ -435,8 +396,8 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
         this.creatingJob = false;
         this.validatingJob = true;
 
-        const validationJob = await validateBulkImportJob(createdJob.id);
-        this.applyBackendJob(validationJob);
+        await validateBulkImportJob(createdJob.id);
+        await this.refreshCurrentJob();
         await this.pollCurrentJobUntil(VALIDATION_TERMINAL_STATUSES);
 
         return this.currentJob;
@@ -460,8 +421,8 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
       this.processCompletedAt = null;
 
       try {
-        const job = await commitBulkImportJob(this.selectedJobId);
-        this.applyBackendJob(job);
+        await commitBulkImportJob(this.selectedJobId);
+        const job = await this.refreshCurrentJob();
 
         return job;
       } catch (error) {
@@ -522,14 +483,6 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
       }
 
       return this.currentJob;
-    },
-    startMockProcessing() {
-      this.selectedJobId = `job-${String(Date.now()).slice(-6)}`;
-      this.processStartedAt = new Date().toISOString();
-      this.processCompletedAt = null;
-    },
-    completeMockProcessing() {
-      this.processCompletedAt = new Date().toISOString();
     },
     resetImport() {
       this.importedFile = null;

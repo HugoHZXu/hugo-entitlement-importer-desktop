@@ -6,6 +6,7 @@ import type {
   BulkImportResultArtifact,
   CreateBulkImportJobInput,
   Product,
+  ProductEntitlement,
 } from '@/shared/types';
 
 export const DEFAULT_BACKEND_URL = 'http://127.0.0.1:4317';
@@ -27,6 +28,12 @@ type GraphqlResponse<TData> = {
   data?: TData | null;
   errors?: GraphqlError[];
 };
+
+type BulkImportRowsResponse =
+  | BulkImportJobRow[]
+  | {
+      items?: BulkImportJobRow[];
+    };
 
 type EntitlementRequestScope = {
   organizationId?: string | null;
@@ -54,6 +61,19 @@ const PRODUCT_FIELDS = `
     subscriberAccountId
     renewalDate
   }
+`;
+
+const ENTITLEMENT_FIELDS = `
+  id
+  productId
+  entitlementCode
+  usageDimensionCode
+  purchasedQuantity
+  allocatedQuantity
+  status
+  startDate
+  endDate
+  source
 `;
 
 function getBackendUrl(): string {
@@ -84,6 +104,10 @@ function normalizeMessage(message: unknown): string | undefined {
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload;
+  }
+
   if (payload && typeof payload === 'object') {
     const errorPayload = payload as ApiErrorPayload;
     const message = normalizeMessage(errorPayload.message);
@@ -202,8 +226,27 @@ async function requestText(path: string, init: RequestInit = {}): Promise<string
   return payload;
 }
 
+async function requestBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  const response = await fetch(createApiUrl(path), {
+    ...init,
+    headers: await createHeaders(init.headers),
+  });
+
+  if (!response.ok) {
+    const payload = await readResponse(response);
+
+    throw new Error(getErrorMessage(payload, `Request failed with ${response.status}.`));
+  }
+
+  return response.blob();
+}
+
 function encodePathSegment(value: string): string {
   return encodeURIComponent(value);
+}
+
+function normalizeBulkImportRowsResponse(response: BulkImportRowsResponse): BulkImportJobRow[] {
+  return Array.isArray(response) ? response : (response.items ?? []);
 }
 
 export async function listProducts(scope: EntitlementRequestScope = {}): Promise<Product[]> {
@@ -223,6 +266,33 @@ export async function listProducts(scope: EntitlementRequestScope = {}): Promise
   return data.products;
 }
 
+export async function listEntitlements({
+  organizationId,
+  productId,
+}: {
+  organizationId: string;
+  productId: string;
+}): Promise<ProductEntitlement[]> {
+  const data = await requestGraphql<
+    { entitlements: ProductEntitlement[] },
+    { organizationId: string; productId: string }
+  >(
+    `
+      query ImportEntitlements($organizationId: ID!, $productId: ID!) {
+        entitlements(productId: $productId, organizationId: $organizationId) {
+          ${ENTITLEMENT_FIELDS}
+        }
+      }
+    `,
+    {
+      organizationId,
+      productId,
+    }
+  );
+
+  return data.entitlements;
+}
+
 export function createBulkImportJob(input: CreateBulkImportJobInput): Promise<BulkImportJobDetail> {
   const { organizationId, ...body } = input;
 
@@ -236,11 +306,20 @@ export function createBulkImportJob(input: CreateBulkImportJobInput): Promise<Bu
 }
 
 export function getBulkImportJob(jobId: string): Promise<BulkImportJobDetail> {
-  return requestJson<BulkImportJobDetail>(`/bulk-import-jobs/${encodePathSegment(jobId)}`);
+  return requestJson<BulkImportJobDetail>(`/bulk-import-jobs/${encodePathSegment(jobId)}`, {
+    cache: 'no-store',
+  });
 }
 
-export function listBulkImportJobRows(jobId: string): Promise<BulkImportJobRow[]> {
-  return requestJson<BulkImportJobRow[]>(`/bulk-import-jobs/${encodePathSegment(jobId)}/rows`);
+export async function listBulkImportJobRows(jobId: string): Promise<BulkImportJobRow[]> {
+  const response = await requestJson<BulkImportRowsResponse>(
+    `/bulk-import-jobs/${encodePathSegment(jobId)}/rows`,
+    {
+      cache: 'no-store',
+    }
+  );
+
+  return normalizeBulkImportRowsResponse(response);
 }
 
 export function validateBulkImportJob(jobId: string): Promise<BulkImportJobDetail> {
@@ -279,6 +358,14 @@ export function downloadBulkImportArtifact({
   return requestText(`/bulk-import-jobs/${encodePathSegment(jobId)}/result/${artifact}`, {
     headers: {
       Accept: 'text/csv',
+    },
+  });
+}
+
+export function downloadBulkImportArtifactsZip(jobId: string): Promise<Blob> {
+  return requestBlob(`/bulk-import-jobs/${encodePathSegment(jobId)}/artifacts.zip`, {
+    headers: {
+      Accept: 'application/zip',
     },
   });
 }

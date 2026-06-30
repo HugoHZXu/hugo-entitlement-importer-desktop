@@ -6,7 +6,16 @@ import {
   IDENTITY_ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY,
   IDENTITY_ACCESS_TOKEN_STORAGE_KEY,
 } from '@/shared/types';
-import { createBulkImportJob, listProducts, validateBulkImportJob } from './client';
+import {
+  createBulkImportJob,
+  downloadBulkImportArtifact,
+  downloadBulkImportArtifactsZip,
+  getBulkImportJob,
+  listEntitlements,
+  listBulkImportJobRows,
+  listProducts,
+  validateBulkImportJob,
+} from './client';
 
 function createMemoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -27,6 +36,15 @@ function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     headers: {
       'Content-Type': 'application/json',
+    },
+    status,
+  });
+}
+
+function textResponse(payload: string, status = 200) {
+  return new Response(payload, {
+    headers: {
+      'Content-Type': 'text/plain',
     },
     status,
   });
@@ -139,6 +157,61 @@ describe('bulk import API client', () => {
     );
   });
 
+  it('loads jobs without browser cache during polling', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(createJobPayload()));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getBulkImportJob('bulk-import-job-1')).resolves.toMatchObject({
+      id: 'bulk-import-job-1',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1',
+      expect.objectContaining({
+        cache: 'no-store',
+      })
+    );
+  });
+
+  it('normalizes paged row responses from the backend', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        items: [
+          {
+            action: 'assign',
+            allocationId: null,
+            department: 'Analytics',
+            email: 'lee.carter@example.com',
+            id: 'bulk-import-row-1',
+            issues: [],
+            jobId: 'bulk-import-job-1',
+            name: 'Lee Carter',
+            normalizedEmail: 'lee.carter@example.com',
+            organizationMembershipId: 'membership-1',
+            rowNumber: 2,
+            seatQuantity: 1,
+            status: 'ready',
+          },
+        ],
+      })
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(listBulkImportJobRows('bulk-import-job-1')).resolves.toMatchObject([
+      {
+        id: 'bulk-import-row-1',
+        status: 'ready',
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1/rows',
+      expect.objectContaining({
+        cache: 'no-store',
+      })
+    );
+  });
+
   it('loads available products through GraphQL with organization scope and identity token', async () => {
     const storage = createMemoryStorage();
 
@@ -210,5 +283,97 @@ describe('bulk import API client', () => {
         organizationId: 'org-demo-001',
       },
     });
+  });
+
+  it('loads product entitlements through GraphQL with product and organization scope', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        data: {
+          entitlements: [
+            {
+              allocatedQuantity: 28,
+              endDate: '2026-12-31',
+              entitlementCode: 'LIC-INSIGHT-STUDIO-2026',
+              id: 'ent-insight-studio-2026-001',
+              productId: 'prod-insight-studio',
+              purchasedQuantity: 75,
+              source: 'contract',
+              startDate: '2026-01-01',
+              status: 'active',
+              usageDimensionCode: 'named_user_count',
+            },
+          ],
+        },
+      })
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      listEntitlements({
+        organizationId: 'org-demo-001',
+        productId: 'prod-insight-studio',
+      })
+    ).resolves.toMatchObject([
+      {
+        id: 'ent-insight-studio-2026-001',
+        productId: 'prod-insight-studio',
+      },
+    ]);
+
+    const firstCall = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const init = firstCall[1];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      variables: {
+        organizationId: 'org-demo-001',
+        productId: 'prod-insight-studio',
+      },
+    });
+  });
+
+  it('surfaces raw text when a non-json artifact request fails', async () => {
+    const fetchMock = vi.fn(async () => textResponse('Artifact is not ready.', 409));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      downloadBulkImportArtifact({
+        artifact: 'report',
+        jobId: 'bulk-import-job-1',
+      })
+    ).rejects.toThrow('Artifact is not ready.');
+  });
+
+  it('downloads the result package zip from the backend artifact endpoint', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('zip-content', {
+          headers: {
+            'Content-Type': 'application/zip',
+          },
+        })
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBulkImportArtifactsZip('bulk-import-job-1')).resolves.toBeInstanceOf(Blob);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1/artifacts.zip',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'application/zip',
+        }),
+      })
+    );
+  });
+
+  it('surfaces backend readiness errors when the result package is not downloadable', async () => {
+    const fetchMock = vi.fn(async () => textResponse('Artifacts are not ready.', 409));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBulkImportArtifactsZip('bulk-import-job-1')).rejects.toThrow(
+      'Artifacts are not ready.'
+    );
   });
 });

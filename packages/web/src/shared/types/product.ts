@@ -13,18 +13,12 @@ export interface UsageDimension {
 }
 
 export interface ProductEntitlementInfo {
-  id?: string;
-  orgProductEntitlementId?: string;
   entitlementCode: string;
   grantType: 'Contract license' | 'Trial license' | 'Scheduled license' | (string & {});
   allocationModel: string;
   subscriberId: string;
   subscriberAccountId: string;
   renewalDate: string;
-  status?: string;
-  purchasedQuantity?: number;
-  allocatedQuantity?: number;
-  availableQuantity?: number;
 }
 
 export interface Product {
@@ -37,4 +31,17 @@ export interface Product {
   supportedPlatforms: string[];
   usageDimensions: UsageDimension[];
   entitlementInfo: ProductEntitlementInfo;
+}
+
+export interface ProductEntitlement {
+  id: string;
+  productId: string;
+  entitlementCode: string;
+  usageDimensionCode: string;
+  purchasedQuantity: number;
+  allocatedQuantity: number;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  source: string;
 }

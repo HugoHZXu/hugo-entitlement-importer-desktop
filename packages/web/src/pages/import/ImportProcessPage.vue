@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  Badge,
   Button,
   Card,
   CardContent,
@@ -119,7 +118,6 @@ onUnmounted(() => {
   <section class="import-screen process-screen">
     <Card class="process-card">
       <CardHeader>
-        <Badge tone="info">{{ store.selectedJobId ?? 'No job' }}</Badge>
         <CardTitle>Import in progress</CardTitle>
       </CardHeader>
       <CardContent>
@@ -146,11 +144,17 @@ onUnmounted(() => {
         </div>
 
         <div class="process-footer">
-          <p class="muted-copy" v-if="!completed">Processing rows. Keep this window open.</p>
-          <p class="muted-copy" v-else>Processing complete. Review the generated summary.</p>
-          <Button type="button" :disabled="!completed" @click="router.push('/import/result')">
-            View result
-          </Button>
+          <p class="process-footer__status muted-copy" v-if="!completed">
+            Processing rows. Keep this window open.
+          </p>
+          <p class="process-footer__status muted-copy" v-else>
+            Processing complete. Review the generated summary.
+          </p>
+          <div class="process-footer__actions">
+            <Button type="button" :disabled="!completed" @click="router.push('/import/result')">
+              View result
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
