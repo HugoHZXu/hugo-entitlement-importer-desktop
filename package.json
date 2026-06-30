@@ -1,9 +1,26 @@
 {
   "name": "hugo-entitlement-importer-desktop",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
+  "description": "Portfolio Electron desktop client for bulk entitlement imports in a SaaS admin workflow.",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HugoHZXu/hugo-entitlement-importer-desktop.git"
+  },
+  "homepage": "https://github.com/HugoHZXu/hugo-entitlement-importer-desktop#readme",
+  "bugs": {
+    "url": "https://github.com/HugoHZXu/hugo-entitlement-importer-desktop/issues"
+  },
+  "keywords": [
+    "electron",
+    "vue",
+    "typescript",
+    "portfolio",
+    "entitlement",
+    "bulk-import"
+  ],
   "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22.13.0",
