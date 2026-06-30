@@ -13,6 +13,14 @@ function sendReviewChartsPayload(targetWebContents = reviewChartsWindow?.webCont
   targetWebContents.send('desktop:review-charts-data', latestReviewChartsPayload);
 }
 
+function getRendererIndexPath() {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'web', 'dist', 'index.html');
+  }
+
+  return join(__dirname, '../../../web/dist/index.html');
+}
+
 function createMainWindow() {
   const mainWindow = new BrowserWindow({
     width: 1440,
@@ -33,7 +41,7 @@ function createMainWindow() {
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    void mainWindow.loadFile(join(__dirname, '../../../web/dist/index.html'));
+    void mainWindow.loadFile(getRendererIndexPath());
   }
 }
 
@@ -77,7 +85,7 @@ function createReviewChartsWindow() {
   if (process.env.ELECTRON_RENDERER_URL) {
     void reviewChartsWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}/#/charts/review`);
   } else {
-    void reviewChartsWindow.loadFile(join(__dirname, '../../../web/dist/index.html'), {
+    void reviewChartsWindow.loadFile(getRendererIndexPath(), {
       hash: '/charts/review',
     });
   }

@@ -1,0 +1,44 @@
+appId: com.hugo.entitlement-importer
+productName: Hugo Entitlement Importer
+asar: true
+
+directories:
+  output: ../../release
+
+files:
+  - package.json
+  - out/**/*
+
+extraResources:
+  - from: ../web/dist
+    to: web/dist
+    filter:
+      - '**/*'
+
+mac:
+  category: public.app-category.business
+  target:
+    - dmg
+    - zip
+  identity: null
+
+dmg:
+  artifactName: '${productName}-${version}-${arch}.${ext}'
+
+win:
+  target:
+    - nsis
+    - portable
+  artifactName: '${productName}-${version}-${arch}.${ext}'
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
+  artifactName: '${productName}-${version}-${arch}.${ext}'
