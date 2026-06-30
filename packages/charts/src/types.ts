@@ -23,6 +23,8 @@ export interface SeatImpactData {
   availableAfterImport: number;
 }
 
+export type SeatProjectionSource = 'backendValidation' | 'localEstimate';
+
 export interface ReviewChartsPayload {
   fileName: string;
   productName: string;
@@ -30,13 +32,17 @@ export interface ReviewChartsPayload {
   updatedAt: string;
   summary: {
     totalRows: number;
+    importableRows: number;
     readyRows: number;
+    needsConfirmationRows: number;
     warningRows: number;
+    skippedRows: number;
     blockedRows: number;
     deletedRows: number;
   };
   statusDistribution: ChartDatum[];
   seatImpact: SeatImpactData;
+  seatProjectionSource: SeatProjectionSource;
   issueReasons: IssueReasonDatum[];
 }
 

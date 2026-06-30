@@ -1,10 +1,17 @@
 import type {
   ChartDatum,
+  ChartTone,
   IssueReasonDatum,
   ResultChartsPayload,
   ReviewChartsPayload,
   SeatImpactData,
 } from '@hugo-entitlement-importer/charts';
+
+import type {
+  BulkImportHistoryDetail,
+  BulkImportJobDetail,
+  BulkImportResultBreakdownItem,
+} from '@/shared/types';
 
 import type { ImportCsvRow } from './importer-types';
 import { summarizeImportResult, summarizeImportRows } from './importer-validation';
@@ -20,8 +27,11 @@ interface ChartPayloadInput {
   rows: ImportCsvRow[];
   fileName?: string | null;
   entitlement?: EntitlementSnapshot | null;
+  job?: BulkImportJobDetail | null;
   jobId?: string | null;
 }
+
+type ReviewSummary = ReviewChartsPayload['summary'];
 
 const fallbackEntitlement: EntitlementSnapshot = {
   name: 'Selected product',
@@ -34,9 +44,10 @@ const issueReasonLabels: Record<string, string> = {
   missing_email: 'Missing email',
   invalid_email: 'Invalid email',
   invalid_action: 'Invalid action',
-  invalid_seat_quantity: 'Invalid seat quantity',
   duplicate_email_in_file: 'Duplicate email',
   conflicting_actions_in_file: 'Conflicting actions',
+  unregistered_user: 'Unregistered user',
+  user_not_in_organization: 'User outside organization',
   membership_not_found: 'Membership not found',
   entitlement_not_active: 'Entitlement inactive',
   already_allocated: 'Already allocated',
@@ -53,21 +64,33 @@ function getFileName(input: ChartPayloadInput) {
   return input.fileName?.trim() || 'No file selected';
 }
 
-function getReadyRows(rows: ImportCsvRow[]) {
+function getCommittedRows(rows: ImportCsvRow[]) {
   return rows.filter(
-    (row) =>
-      !row.deleted && (row.status === 'ready' || row.status === 'success') && row.seatQuantity !== null
+    (row) => !row.deleted && (row.status === 'ready' || row.status === 'success')
   );
 }
 
-function calculateSeatImpact(rows: ImportCsvRow[], entitlement: EntitlementSnapshot): SeatImpactData {
-  const readyRows = getReadyRows(rows);
-  const plannedAssign = readyRows
+function getReviewPlannedRows(rows: ImportCsvRow[]) {
+  return rows.filter(
+    (row) =>
+      !row.deleted &&
+      (row.status === 'ready' ||
+        row.status === 'warning' ||
+        row.status === 'needsConfirmation' ||
+        row.status === 'success')
+  );
+}
+
+function calculateSeatImpactFromRows(
+  entitlement: EntitlementSnapshot,
+  plannedRows: ImportCsvRow[]
+): SeatImpactData {
+  const plannedAssign = plannedRows
     .filter((row) => row.action === 'assign')
-    .reduce((total, row) => total + (row.seatQuantity ?? 0), 0);
-  const plannedRevoke = readyRows
+    .reduce((total) => total + 1, 0);
+  const plannedRevoke = plannedRows
     .filter((row) => row.action === 'revoke')
-    .reduce((total, row) => total + (row.seatQuantity ?? 0), 0);
+    .reduce((total) => total + 1, 0);
   const projectedAllocated = entitlement.allocatedQuantity + plannedAssign - plannedRevoke;
 
   return {
@@ -77,6 +100,67 @@ function calculateSeatImpact(rows: ImportCsvRow[], entitlement: EntitlementSnaps
     plannedRevoke,
     projectedAllocated,
     availableAfterImport: entitlement.purchasedQuantity - projectedAllocated,
+  };
+}
+
+function calculateSeatImpact(rows: ImportCsvRow[], entitlement: EntitlementSnapshot): SeatImpactData {
+  return calculateSeatImpactFromRows(entitlement, getCommittedRows(rows));
+}
+
+function calculateReviewSeatImpact(input: ChartPayloadInput, entitlement: EntitlementSnapshot) {
+  const plannedRows = getReviewPlannedRows(input.rows);
+  const plannedAssign = plannedRows.filter((row) => row.action === 'assign').length;
+  const plannedRevoke = plannedRows.filter((row) => row.action === 'revoke').length;
+  const job = input.job;
+
+  if (job) {
+    return {
+      purchasedQuantity: job.purchasedQuantity,
+      currentAllocated: job.allocatedBefore,
+      plannedAssign,
+      plannedRevoke,
+      projectedAllocated: job.projectedAllocatedQuantity,
+      availableAfterImport: job.projectedAvailableQuantity,
+    };
+  }
+
+  return calculateSeatImpactFromRows(entitlement, plannedRows);
+}
+
+function getReviewSummary(rows: ImportCsvRow[], job?: BulkImportJobDetail | null): ReviewSummary {
+  const deletedRows = rows.filter((row) => row.deleted).length;
+
+  if (job) {
+    const importableRows = job.readyRows + job.needsConfirmationRows;
+
+    return {
+      totalRows: job.totalRows + deletedRows,
+      importableRows,
+      readyRows: job.readyRows,
+      needsConfirmationRows: job.needsConfirmationRows,
+      warningRows: job.warningRows,
+      skippedRows: job.skippedRows,
+      blockedRows: job.blockedRows,
+      deletedRows,
+    };
+  }
+
+  const activeRows = rows.filter((row) => !row.deleted);
+  const readyRows = activeRows.filter((row) => row.status === 'ready' || row.status === 'success')
+    .length;
+  const needsConfirmationRows = activeRows.filter((row) => row.status === 'needsConfirmation')
+    .length;
+
+  return {
+    totalRows: rows.length,
+    importableRows: readyRows + needsConfirmationRows,
+    readyRows,
+    needsConfirmationRows,
+    warningRows: activeRows.filter((row) => row.status === 'warning').length,
+    skippedRows: activeRows.filter((row) => row.status === 'skipped').length,
+    blockedRows: activeRows.filter((row) => row.status === 'blocked' || row.status === 'failed')
+      .length,
+    deletedRows,
   };
 }
 
@@ -90,6 +174,28 @@ function toReasonSeverity(severity: string): 'warning' | 'blocked' | 'skipped' {
   }
 
   return 'blocked';
+}
+
+function toResultBreakdownTone(item: BulkImportResultBreakdownItem): ChartTone {
+  if (item.id === 'success') {
+    return 'success';
+  }
+
+  if (item.id === 'skipped' || item.id === 'needsConfirmation') {
+    return 'warning';
+  }
+
+  return 'danger';
+}
+
+function getHistoryDetailUpdatedAt(detail: BulkImportHistoryDetail): string {
+  return (
+    detail.job.completedAt ??
+    detail.job.committedAt ??
+    detail.job.validatedAt ??
+    detail.job.lastHeartbeatAt ??
+    detail.job.createdAt
+  );
 }
 
 function getIssueReasons(rows: ImportCsvRow[], includeDeletedReason: boolean): IssueReasonDatum[] {
@@ -135,11 +241,18 @@ function getIssueReasons(rows: ImportCsvRow[], includeDeletedReason: boolean): I
 
 export function buildReviewChartsPayload(input: ChartPayloadInput): ReviewChartsPayload {
   const entitlement = getEntitlement(input);
-  const summary = summarizeImportRows(input.rows);
+  const summary = getReviewSummary(input.rows, input.job);
 
   const statusDistribution: ChartDatum[] = [
     { id: 'ready', label: 'Ready', value: summary.readyRows, tone: 'success' },
+    {
+      id: 'needsConfirmation',
+      label: 'Needs confirmation',
+      value: summary.needsConfirmationRows,
+      tone: 'info',
+    },
     { id: 'warning', label: 'Warning', value: summary.warningRows, tone: 'warning' },
+    { id: 'skipped', label: 'Skipped', value: summary.skippedRows, tone: 'neutral' },
     { id: 'blocked', label: 'Blocked', value: summary.blockedRows, tone: 'danger' },
     { id: 'deleted', label: 'Deleted', value: summary.deletedRows, tone: 'neutral' },
   ];
@@ -151,13 +264,17 @@ export function buildReviewChartsPayload(input: ChartPayloadInput): ReviewCharts
     updatedAt: new Date().toISOString(),
     summary: {
       totalRows: summary.totalRows,
+      importableRows: summary.importableRows,
       readyRows: summary.readyRows,
+      needsConfirmationRows: summary.needsConfirmationRows,
       warningRows: summary.warningRows,
+      skippedRows: summary.skippedRows,
       blockedRows: summary.blockedRows,
       deletedRows: summary.deletedRows,
     },
     statusDistribution,
-    seatImpact: calculateSeatImpact(input.rows, entitlement),
+    seatImpact: calculateReviewSeatImpact(input, entitlement),
+    seatProjectionSource: input.job ? 'backendValidation' : 'localEstimate',
     issueReasons: getIssueReasons(input.rows, false),
   };
 }
@@ -186,6 +303,44 @@ export function buildResultChartsPayload(input: ChartPayloadInput): ResultCharts
       skippedRows,
       failedRows: resultSummary.failedRows,
       processedRows: resultSummary.processedRows,
+    },
+  };
+}
+
+export function buildHistoryDetailResultChartsPayload(
+  detail: BulkImportHistoryDetail
+): ResultChartsPayload {
+  return {
+    fileName: detail.job.fileName,
+    jobId: detail.job.id,
+    productName: detail.job.productName || detail.job.productId,
+    entitlementCode: detail.job.orgProductEntitlementId,
+    updatedAt: getHistoryDetailUpdatedAt(detail),
+    resultBreakdown: detail.resultBreakdown.map((item) => ({
+      id: item.id,
+      label: item.label,
+      value: item.count,
+      tone: toResultBreakdownTone(item),
+    })),
+    seatImpact: {
+      purchasedQuantity: detail.seatImpact.purchasedQuantity,
+      currentAllocated: detail.seatImpact.occupiedBefore,
+      plannedAssign: detail.seatImpact.assignedSeats,
+      plannedRevoke: detail.seatImpact.revokedSeats,
+      projectedAllocated: detail.seatImpact.occupiedAfter,
+      availableAfterImport: detail.seatImpact.remainingAfter,
+    },
+    issueReasons: detail.issueReasons.map((reason) => ({
+      code: reason.code,
+      label: reason.message || toReasonLabel(reason.code),
+      count: reason.rowCount,
+      severity: toReasonSeverity(reason.severity),
+    })),
+    totals: {
+      successRows: detail.resultSummary.successRows,
+      skippedRows: detail.resultSummary.skippedRows,
+      failedRows: detail.resultSummary.failedOrBlockedRows,
+      processedRows: detail.resultSummary.processedRows,
     },
   };
 }

@@ -13,5 +13,6 @@ export type {
   ResultChartsPayload,
   ReviewChartsPayload,
   SeatImpactData,
+  SeatProjectionSource,
 } from './types';
 export { createChartPlaceholder, type G2ChartHandle } from './useG2Chart';

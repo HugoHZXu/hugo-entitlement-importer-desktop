@@ -52,6 +52,11 @@ export const router = createRouter({
       component: HistoryPage,
     },
     {
+      path: '/history/:jobId',
+      name: 'history-detail',
+      component: () => import('@/pages/history/HistoryDetailPage.vue'),
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: SettingsPage,

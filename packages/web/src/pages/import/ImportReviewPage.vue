@@ -34,6 +34,7 @@ const statusTone: Record<ImportRowStatus, 'success' | 'warning' | 'danger' | 'ne
   blocked: 'danger',
   deleted: 'neutral',
   failed: 'danger',
+  needsConfirmation: 'warning',
   ready: 'success',
   skipped: 'warning',
   success: 'success',
@@ -49,6 +50,7 @@ const statusFilterOptions: SelectOption[] = [
   { value: 'all', label: 'All' },
   { value: 'ready', label: 'Ready' },
   { value: 'warning', label: 'Warning' },
+  { value: 'needsConfirmation', label: 'Needs confirmation' },
   { value: 'blocked', label: 'Blocked' },
   { value: 'skipped', label: 'Skipped' },
   { value: 'success', label: 'Success' },
@@ -68,6 +70,7 @@ const reviewChartsPayload = computed(() =>
     rows: store.rows,
     fileName: store.importedFile?.name,
     entitlement: store.selectedEntitlement,
+    job: store.currentJob,
   })
 );
 const actionButtonLabel = computed(() => {
@@ -83,6 +86,10 @@ const actionButtonLabel = computed(() => {
     if (store.committingJob) {
       return 'Starting import';
     }
+  }
+
+  if (store.validationComplete && store.currentJob?.canConfirmImportRows) {
+    return 'Confirm and start import';
   }
 
   return store.validationComplete ? 'Start import' : 'Validate with backend';
@@ -103,7 +110,7 @@ const jobSummary = computed(() => {
     return null;
   }
 
-  return `${store.currentJob.status} · ${store.currentJob.readyRows} ready · ${store.currentJob.blockedRows} blocked · ${store.currentJob.skippedRows} skipped`;
+  return `${store.currentJob.status} · ${store.currentJob.readyRows} ready · ${store.currentJob.needsConfirmationRows} needs confirmation · ${store.currentJob.blockedRows} blocked · ${store.currentJob.skippedRows} skipped`;
 });
 const backendValidationFailed = computed(
   () => store.currentJob?.status === 'failed' || store.currentJob?.status === 'cancelled'
@@ -136,6 +143,10 @@ const validationResultSubtitle = computed(() => {
   }
 
   if (store.canCommit) {
+    if (store.currentJob?.canConfirmImportRows) {
+      return 'Confirm these rows to create or join organization users and start import.';
+    }
+
     return 'Rows are ready to start import.';
   }
 
@@ -153,6 +164,7 @@ const validationResultStats = computed(() => {
 
   return [
     { label: 'Ready', value: job.readyRows },
+    { label: 'Needs confirmation', value: job.needsConfirmationRows },
     { label: 'Blocked', value: job.blockedRows },
     { label: 'Skipped', value: job.skippedRows },
   ];
@@ -162,18 +174,15 @@ const validationResultPrimaryLabel = computed(() => {
     return 'Close';
   }
 
+  if (store.currentJob?.canConfirmImportRows) {
+    return 'Confirm and start import';
+  }
+
   return store.canCommit ? 'Start import' : 'Review rows';
 });
 
 function hasIssue(row: ImportCsvRow, issuePrefix: string) {
   return row.issues.some((issue) => issue.code.includes(issuePrefix));
-}
-
-function updateSeatQuantity(rowId: string, value: string) {
-  const trimmedValue = value.trim();
-  store.updateRow(rowId, {
-    seatQuantity: trimmedValue === '' ? null : Number(trimmedValue),
-  });
 }
 
 function updateStatusFilter(value: string | number | null) {
@@ -188,7 +197,10 @@ async function startProcess() {
   }
 
   if (!store.validationComplete) {
-    await store.createAndValidateCurrentImport(identityStore.selectedEntitlementOrganizationId);
+    await store.createAndValidateCurrentImport(identityStore.selectedEntitlementOrganizationId, {
+      canManageOrganizationMembership:
+        identityStore.canManageSelectedEntitlementOrganizationMembership,
+    });
     validationResultModalOpen.value = true;
     return;
   }
@@ -285,21 +297,6 @@ const columns = computed<DataGridColumn<ImportCsvRow>[]>(() => [
         status: hasIssue(row, 'action') ? 'error' : 'default',
         'onUpdate:modelValue': (value: string | number | null) =>
           store.updateRow(row.id, { action: String(value ?? '') }),
-      }),
-  },
-  {
-    id: 'seatQuantity',
-    header: 'Seats',
-    width: 132,
-    align: 'right',
-    render: (row) =>
-      h(Input, {
-        modelValue: row.seatQuantity ?? '',
-        type: 'number',
-        size: 'sm',
-        status: hasIssue(row, 'seat') ? 'error' : 'default',
-        disabled: row.deleted,
-        'onUpdate:modelValue': (value: string) => updateSeatQuantity(row.id, value),
       }),
   },
   {

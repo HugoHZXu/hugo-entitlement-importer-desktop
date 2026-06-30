@@ -38,8 +38,9 @@ const copy: Record<
     retry: true,
   },
   noEntitlementScope: {
-    title: 'No entitlement organization access',
-    description: 'The selected demo account does not have an entitlement organization scope.',
+    title: 'No entitlement import access',
+    description:
+      'The selected demo account must be an organization admin or Entitlement Manager for an entitlement organization.',
   },
   organizationUnavailable: {
     title: 'Organization unavailable',

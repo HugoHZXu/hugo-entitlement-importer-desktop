@@ -14,10 +14,18 @@ import {
 } from '@/shared/stores/identity-session-storage';
 import type {
   DemoAccount,
+  DemoAccountMembership,
   DemoIdentitySession,
   DemoOrganizationScope,
   DemoOrganizationStatus,
+  DemoRole,
 } from '@/shared/types';
+
+const ENTITLEMENT_IMPORT_ACCESS_ROLE_KEYS = new Set([
+  'organization_admin',
+  'entitlement_manager',
+]);
+const ORGANIZATION_MEMBERSHIP_MANAGER_ROLE_KEY = 'organization_admin';
 
 interface IdentitySessionState {
   accounts: DemoAccount[];
@@ -47,6 +55,61 @@ function isTokenExpired(expiresAt: string | null): boolean {
 
 function isActiveStatus(status: DemoOrganizationStatus): boolean {
   return status === 'active';
+}
+
+function isActiveMembership(membership: DemoAccountMembership): boolean {
+  return membership.membershipStatus.toLowerCase() === 'active';
+}
+
+function hasEntitlementImportAccessRole(role: DemoRole): boolean {
+  return ENTITLEMENT_IMPORT_ACCESS_ROLE_KEYS.has(role.key);
+}
+
+function hasOrganizationMembershipManagerRole(role: DemoRole): boolean {
+  return role.key === ORGANIZATION_MEMBERSHIP_MANAGER_ROLE_KEY;
+}
+
+function findEntitlementOrganizationMembership(
+  account: DemoAccount,
+  organizationId: string
+): DemoAccountMembership | null {
+  return (
+    account.memberships.find((membership) => membership.organization.id === organizationId) ?? null
+  );
+}
+
+export function canManageEntitlementOrganization(
+  account: DemoAccount,
+  organizationId: string
+): boolean {
+  const membership = findEntitlementOrganizationMembership(account, organizationId);
+
+  return Boolean(
+    membership &&
+      isActiveMembership(membership) &&
+      membership.roles.some(hasEntitlementImportAccessRole)
+  );
+}
+
+export function canManageOrganizationMembership(
+  account: DemoAccount,
+  organizationId: string
+): boolean {
+  const membership = findEntitlementOrganizationMembership(account, organizationId);
+
+  return Boolean(
+    membership &&
+      isActiveMembership(membership) &&
+      membership.roles.some(hasOrganizationMembershipManagerRole)
+  );
+}
+
+export function getManageableEntitlementOrganizations(
+  account: DemoAccount
+): DemoOrganizationScope[] {
+  return account.entitlementOrganizations.filter((organization) =>
+    canManageEntitlementOrganization(account, organization.id)
+  );
 }
 
 function getErrorMessage(error: unknown): string {
@@ -133,11 +196,24 @@ export const useIdentitySessionStore = defineStore('identity-session', {
         state.selectedEntitlementOrganizationId ?? 'no-entitlement-organization'
       }`;
     },
+    canManageSelectedEntitlementOrganizationMembership(state): boolean {
+      if (!state.currentAccount || !state.selectedEntitlementOrganizationId) {
+        return false;
+      }
+
+      return canManageOrganizationMembership(
+        state.currentAccount,
+        state.selectedEntitlementOrganizationId
+      );
+    },
   },
   actions: {
     applySession(session: DemoIdentitySession, requestedAccountId: string | null) {
+      const entitlementOrganizations = getManageableEntitlementOrganizations(
+        session.currentAccount
+      );
       const selectedOrganizationId = selectEntitlementOrganizationId(
-        session.entitlementOrganizations,
+        entitlementOrganizations,
         this.selectedEntitlementOrganizationId ?? readStoredEntitlementOrganizationId()
       );
 
@@ -147,7 +223,7 @@ export const useIdentitySessionStore = defineStore('identity-session', {
       this.accessToken = session.accessToken;
       this.tokenType = session.tokenType;
       this.expiresAt = session.expiresAt;
-      this.entitlementOrganizations = session.entitlementOrganizations;
+      this.entitlementOrganizations = entitlementOrganizations;
       this.selectedEntitlementOrganizationId = selectedOrganizationId;
       this.errorMessage = null;
       this.noticeMessage =

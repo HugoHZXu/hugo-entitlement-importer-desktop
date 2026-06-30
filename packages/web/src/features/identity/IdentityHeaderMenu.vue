@@ -4,7 +4,10 @@ import { Check, ChevronsUpDown, RefreshCw, UserRound } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import { useIdentitySessionStore } from '@/shared/stores/identity-session-store';
+import {
+  getManageableEntitlementOrganizations,
+  useIdentitySessionStore,
+} from '@/shared/stores/identity-session-store';
 import type { DemoAccount, DemoOrganizationScope } from '@/shared/types';
 
 const identityStore = useIdentitySessionStore();
@@ -56,15 +59,17 @@ function isUnavailableOrganization(organization: DemoOrganizationScope): boolean
 }
 
 function getEntitlementAccessSummary(account: DemoAccount): string {
-  if (account.entitlementOrganizations.length === 0) {
-    return 'No entitlement organization access';
+  const manageableOrganizations = getManageableEntitlementOrganizations(account);
+
+  if (manageableOrganizations.length === 0) {
+    return 'No entitlement import access';
   }
 
-  if (account.entitlementOrganizations.length === 1) {
-    return account.entitlementOrganizations[0]?.name ?? 'One entitlement organization';
+  if (manageableOrganizations.length === 1) {
+    return manageableOrganizations[0]?.name ?? 'One entitlement organization';
   }
 
-  return `${account.entitlementOrganizations.length} entitlement organizations`;
+  return `${manageableOrganizations.length} entitlement organizations`;
 }
 
 function handleDocumentClick(event: MouseEvent) {
@@ -152,7 +157,7 @@ onBeforeUnmount(() => {
         </div>
 
         <p v-if="entitlementOrganizations.length === 0" class="identity-empty">
-          No entitlement organization access.
+          No entitlement import access.
         </p>
 
         <div v-else class="identity-option-list">

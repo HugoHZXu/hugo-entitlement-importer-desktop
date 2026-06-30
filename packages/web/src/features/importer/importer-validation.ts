@@ -18,9 +18,12 @@ const issueMessages: Record<string, string> = {
   missing_email: 'Email is required.',
   invalid_email: 'Email format is invalid.',
   invalid_action: 'Action must be assign or revoke.',
-  invalid_seat_quantity: 'Seat quantity must be a positive whole number.',
   duplicate_email_in_file: 'This user appears more than once in this file.',
   conflicting_actions_in_file: 'This user has both assign and revoke actions in this file.',
+  unregistered_user:
+    'Confirming will create an inactive user, add them to the organization, and reserve a seat.',
+  user_not_in_organization:
+    'Confirming will add this existing account to the organization and assign the entitlement.',
   membership_not_found: 'This email does not match an active organization membership.',
   entitlement_not_active: 'The selected entitlement is not active.',
   already_allocated: 'This user already has this entitlement.',
@@ -32,14 +35,28 @@ const issueSeverity: Record<string, ImportIssueSeverity> = {
   missing_email: 'blocked',
   invalid_email: 'blocked',
   invalid_action: 'blocked',
-  invalid_seat_quantity: 'blocked',
-  duplicate_email_in_file: 'warning',
+  duplicate_email_in_file: 'blocked',
   conflicting_actions_in_file: 'blocked',
+  unregistered_user: 'warning',
+  user_not_in_organization: 'warning',
   membership_not_found: 'blocked',
   entitlement_not_active: 'blocked',
   already_allocated: 'warning',
   not_allocated: 'blocked',
-  seat_limit_exceeded: 'blocked',
+  seat_limit_exceeded: 'warning',
+};
+
+const localIssueCodes = new Set<string>([
+  'missing_email',
+  'invalid_email',
+  'invalid_action',
+  'duplicate_email_in_file',
+  'conflicting_actions_in_file',
+]);
+
+type NormalizeImportRowsOptions = {
+  preserveNonLocalIssues?: boolean;
+  preserveStatuses?: boolean;
 };
 
 function createIssue(code: ImportIssueCode): ImportIssue {
@@ -60,34 +77,53 @@ function addIssue(row: ImportCsvRow, code: ImportIssueCode) {
   }
 }
 
+function isLocalIssue(issue: ImportIssue) {
+  return localIssueCodes.has(issue.code);
+}
+
+function normalizePreservedIssue(issue: ImportIssue, rowStatus: ImportRowStatus): ImportIssue {
+  if (issue.code === 'seat_limit_exceeded' && rowStatus !== 'failed') {
+    return {
+      ...issue,
+      severity: 'warning',
+    };
+  }
+
+  return issue;
+}
+
+function isBlockingIssue(issue: ImportIssue) {
+  return issue.severity === 'blocked' && issue.code !== 'seat_limit_exceeded';
+}
+
 function normalizeAction(value: unknown): ImportAction | string {
   const action = String(value ?? '').trim().toLowerCase();
   return action === '' ? 'assign' : action;
 }
 
-function normalizeSeatQuantity(value: unknown): number | null {
-  const rawValue = String(value ?? '').trim();
-
-  if (rawValue === '') {
-    return 1;
-  }
-
-  const parsedValue = Number(rawValue);
-
-  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null;
-}
-
-function resolveStatus(row: ImportCsvRow): ImportRowStatus {
+function resolveStatus(row: ImportCsvRow, previousStatus?: ImportRowStatus): ImportRowStatus {
   if (row.deleted) {
     return 'deleted';
   }
 
-  if (row.issues.some((issue) => issue.severity === 'blocked')) {
+  if (row.issues.some(isBlockingIssue)) {
     return 'blocked';
   }
 
   if (row.issues.some((issue) => issue.severity === 'warning')) {
+    if (previousStatus === 'needsConfirmation') {
+      return 'needsConfirmation';
+    }
+
+    if (previousStatus === 'skipped') {
+      return 'skipped';
+    }
+
     return 'warning';
+  }
+
+  if (previousStatus === 'success' || previousStatus === 'failed' || previousStatus === 'skipped') {
+    return previousStatus;
   }
 
   return 'ready';
@@ -102,10 +138,6 @@ function validateSingleRow(row: ImportCsvRow) {
 
   if (!VALID_ACTIONS.has(row.action as ImportAction)) {
     addIssue(row, 'invalid_action');
-  }
-
-  if (row.seatQuantity === null) {
-    addIssue(row, 'invalid_seat_quantity');
   }
 }
 
@@ -138,11 +170,14 @@ function validateDuplicateRows(rows: ImportCsvRow[]) {
       continue;
     }
 
-    rowsForUser.slice(1).forEach((row) => addIssue(row, 'duplicate_email_in_file'));
+    rowsForUser.forEach((row) => addIssue(row, 'duplicate_email_in_file'));
   }
 }
 
-export function normalizeImportRows(rows: ImportCsvRow[]): ImportCsvRow[] {
+export function normalizeImportRows(
+  rows: ImportCsvRow[],
+  options: NormalizeImportRowsOptions = {}
+): ImportCsvRow[] {
   const normalizedRows = rows.map((row) => ({
     ...row,
     email: row.email.trim(),
@@ -150,15 +185,19 @@ export function normalizeImportRows(rows: ImportCsvRow[]): ImportCsvRow[] {
     department: row.department.trim(),
     action: normalizeAction(row.action),
     userKey: row.email.trim().toLowerCase(),
-    issues: [] as ImportIssue[],
+    issues: options.preserveNonLocalIssues
+      ? row.issues
+          .filter((issue) => !isLocalIssue(issue))
+          .map((issue) => normalizePreservedIssue(issue, row.status))
+      : ([] as ImportIssue[]),
   }));
 
   normalizedRows.forEach(validateSingleRow);
   validateDuplicateRows(normalizedRows);
 
-  return normalizedRows.map((row) => ({
+  return normalizedRows.map((row, index) => ({
     ...row,
-    status: resolveStatus(row),
+    status: resolveStatus(row, options.preserveStatuses ? rows[index]?.status : undefined),
   }));
 }
 
@@ -177,7 +216,6 @@ export function parseImportCsv(content: string): ImportCsvRow[] {
       name: String(row.name ?? ''),
       department: String(row.department ?? ''),
       action: normalizeAction(row.action),
-      seatQuantity: normalizeSeatQuantity(row.seatQuantity),
       userKey: String(row.email ?? '').trim().toLowerCase(),
       deleted: false,
       issues: [],
@@ -194,8 +232,12 @@ export function summarizeImportRows(rows: ImportCsvRow[]): ImportSummary {
     activeRows: activeRows.length,
     readyRows: activeRows.filter((row) => row.status === 'ready' || row.status === 'success')
       .length,
-    warningRows: activeRows.filter((row) => row.status === 'warning' || row.status === 'skipped')
-      .length,
+    warningRows: activeRows.filter(
+      (row) =>
+        row.status === 'warning' ||
+        row.status === 'skipped' ||
+        row.status === 'needsConfirmation'
+    ).length,
     blockedRows: activeRows.filter((row) => row.status === 'blocked' || row.status === 'failed')
       .length,
     deletedRows: rows.filter((row) => row.deleted).length,
@@ -232,7 +274,7 @@ export function summarizeImportResult(rows: ImportCsvRow[]): ImportResultSummary
 
 export function cloneRowWithPatch(
   row: ImportCsvRow,
-  patch: Partial<Pick<ImportCsvRow, 'email' | 'name' | 'department' | 'action' | 'seatQuantity'>>
+  patch: Partial<Pick<ImportCsvRow, 'email' | 'name' | 'department' | 'action'>>
 ): ImportCsvRow {
   return {
     ...row,

@@ -76,8 +76,8 @@ importers:
         specifier: workspace:*
         version: link:../charts
       '@hugo-ui/shadcn-vue':
-        specifier: 0.2.0-local.1782765559315
-        version: 0.2.0-local.1782765559315(eslint@10.6.0(jiti@2.7.0))(vue@3.5.39(typescript@6.0.3))
+        specifier: 0.2.0-local.1782802130538
+        version: 0.2.0-local.1782802130538(eslint@10.6.0(jiti@2.7.0))(vue@3.5.39(typescript@6.0.3))
       '@lucide/vue':
         specifier: ^1.21.0
         version: 1.21.0(vue@3.5.39(typescript@6.0.3))
@@ -744,8 +744,8 @@ packages:
     peerDependencies:
       hono: ^4
 
-  '@hugo-ui/shadcn-vue@0.2.0-local.1782765559315':
-    resolution: {integrity: sha512-F7nOEASM/gaKOa5ttdCBRMx5xdUX3W/4uAA9k6VbAAX+lCM+TJDYEYWegRic1vAC2uTXhXAYN+P830l8YL35aw==}
+  '@hugo-ui/shadcn-vue@0.2.0-local.1782802130538':
+    resolution: {integrity: sha512-GtOOqTIhKv50sUEkKlM8R6TwrfjmImYEwmiRByxN8qPzTl5PaVmpdNKo3WP0SQSYjSaMDTI9O5BgHedCWqitdA==}
     peerDependencies:
       vue: ^3.5.0
 
@@ -4176,7 +4176,7 @@ snapshots:
     dependencies:
       hono: 4.12.27
 
-  '@hugo-ui/shadcn-vue@0.2.0-local.1782765559315(eslint@10.6.0(jiti@2.7.0))(vue@3.5.39(typescript@6.0.3))':
+  '@hugo-ui/shadcn-vue@0.2.0-local.1782802130538(eslint@10.6.0(jiti@2.7.0))(vue@3.5.39(typescript@6.0.3))':
     dependencies:
       '@tanstack/vue-table': 8.21.3(vue@3.5.39(typescript@6.0.3))
       class-variance-authority: 0.7.1

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import BulkImportResultView from '@/features/importer/BulkImportResultView.vue';
 import { buildHistoryDetailResultChartsPayload } from '@/features/importer/importer-chart-data';
@@ -8,63 +8,121 @@ import {
   downloadBulkImportArtifactsZipUrl,
   getBulkImportHistoryDetail,
 } from '@/shared/api/client';
-import { useImportWorkflowStore } from '@/shared/stores/import-workflow-store';
-import type { BulkImportHistoryDetail } from '@/shared/types';
+import type { BulkImportHistoryDetail, BulkImportJobStatus } from '@/shared/types';
 
+const route = useRoute();
 const router = useRouter();
-const store = useImportWorkflowStore();
 const detail = ref<BulkImportHistoryDetail | null>(null);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 const exportError = ref<string | null>(null);
 const exportingPackage = ref(false);
+let loadRequestId = 0;
 
+const jobId = computed(() => {
+  const routeJobId = route.params.jobId;
+
+  return Array.isArray(routeJobId) ? routeJobId[0] : routeJobId;
+});
 const resultChartsPayload = computed(() =>
   detail.value ? buildHistoryDetailResultChartsPayload(detail.value) : null
 );
-const hasReviewItems = computed(
-  () =>
-    (detail.value?.resultSummary.reviewItemRows ?? 0) > 0 ||
-    (detail.value?.resultSummary.failedOrBlockedRows ?? 0) > 0
-);
-const resultLabel = computed(() =>
-  hasReviewItems.value ? 'Completed with review items' : 'Completed'
-);
-const resultTone = computed(() => (hasReviewItems.value ? 'warning' : 'success'));
+const resultLabel = computed(() => {
+  if (!detail.value) {
+    return 'Import result';
+  }
+
+  if (
+    detail.value.job.status === 'completedWithErrors' ||
+    detail.value.resultSummary.reviewItemRows > 0 ||
+    detail.value.resultSummary.failedOrBlockedRows > 0
+  ) {
+    return 'Completed with review items';
+  }
+
+  if (detail.value.job.status === 'completed') {
+    return 'Completed';
+  }
+
+  return formatStatusLabel(detail.value.job.status);
+});
+const resultTone = computed(() => {
+  switch (detail.value?.job.status) {
+    case 'completed':
+      return 'success';
+    case 'completedWithErrors':
+    case 'validated':
+    case 'readyToCommit':
+      return 'warning';
+    case 'failed':
+    case 'cancelled':
+      return 'danger';
+    case 'processing':
+    case 'validating':
+      return 'info';
+    default:
+      return 'neutral';
+  }
+});
 const canExport = computed(
   () => Boolean(detail.value?.download.canDownloadResults && detail.value.download.artifactZipUrl)
 );
 
-onMounted(() => {
-  void loadResultDetail();
-});
+watch(
+  jobId,
+  () => {
+    void loadResultDetail();
+  },
+  { immediate: true }
+);
 
 async function loadResultDetail() {
-  if (!store.selectedJobId) {
-    loadError.value = 'No backend job is available for this result.';
+  const currentJobId = jobId.value;
+  const requestId = ++loadRequestId;
+
+  if (!currentJobId) {
+    loadError.value = 'No import job was selected.';
     return;
   }
 
   loading.value = true;
   loadError.value = null;
+  exportError.value = null;
 
   try {
-    detail.value = await getBulkImportHistoryDetail(store.selectedJobId);
+    const result = await getBulkImportHistoryDetail(currentJobId);
+
+    if (requestId !== loadRequestId) {
+      return;
+    }
+
+    detail.value = result;
   } catch (error) {
+    if (requestId !== loadRequestId) {
+      return;
+    }
+
+    detail.value = null;
     loadError.value = error instanceof Error ? error.message : 'Result detail could not be loaded.';
   } finally {
-    loading.value = false;
+    if (requestId === loadRequestId) {
+      loading.value = false;
+    }
   }
 }
 
-function resetAndStartAgain() {
-  store.resetImport();
-  void router.push('/import/upload');
+function backToHistory() {
+  void router.push('/history');
+}
+
+function formatStatusLabel(status: BulkImportJobStatus): string {
+  return status
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function getResultPackageFileName() {
-  const baseName =
-    detail.value?.job.fileName?.replace(/\.[^/.]+$/, '') || store.selectedJobId || 'import-result';
+  const baseName = detail.value?.job.fileName?.replace(/\.[^/.]+$/, '') || jobId.value || 'import-result';
   const safeName = baseName.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '');
 
   return `${safeName || 'import-result'}-package.zip`;
@@ -110,16 +168,18 @@ async function downloadResultPackage() {
     </div>
 
     <BulkImportResultView
-      v-else-if="resultChartsPayload"
+      v-else-if="resultChartsPayload && detail"
       :can-export="canExport"
       :export-error="exportError"
       :exporting="exportingPackage"
       :payload="resultChartsPayload"
-      primary-action-label="Back home"
+      primary-action-label="Back to history"
+      :status="detail.job.status"
       :status-label="resultLabel"
+      title="History detail"
       :tone="resultTone"
       @export="downloadResultPackage"
-      @primary-action="resetAndStartAgain"
+      @primary-action="backToHistory"
     />
   </section>
 </template>

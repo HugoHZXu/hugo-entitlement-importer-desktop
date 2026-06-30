@@ -4,9 +4,10 @@ export type ImportIssueCode =
   | 'missing_email'
   | 'invalid_email'
   | 'invalid_action'
-  | 'invalid_seat_quantity'
   | 'duplicate_email_in_file'
   | 'conflicting_actions_in_file'
+  | 'unregistered_user'
+  | 'user_not_in_organization'
   | 'membership_not_found'
   | 'entitlement_not_active'
   | 'already_allocated'
@@ -19,6 +20,7 @@ export type ImportIssueSeverity = 'warning' | 'blocked';
 export type ImportRowStatus =
   | 'ready'
   | 'warning'
+  | 'needsConfirmation'
   | 'blocked'
   | 'deleted'
   | 'skipped'
@@ -39,7 +41,6 @@ export interface ImportCsvRow {
   name: string;
   department: string;
   action: ImportAction | string;
-  seatQuantity: number | null;
   userKey: string;
   deleted: boolean;
   issues: ImportIssue[];

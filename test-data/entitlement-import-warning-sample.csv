@@ -1,25 +1,25 @@
-email,name,department,action,seatQuantity
-amy.chen@example.com,Amy Chen,Analytics,assign,1
-noah.kim@example.com,Noah Kim,Operations,revoke,1
-liam.patel@example.com,Liam Patel,Finance,assign,2
-sofia.garcia@example.com,Sofia Garcia,Design,assign,1
-marco.rossi@example.com,Marco Rossi,Sales,revoke,1
-nina.wong@example.com,Nina Wong,Support,assign,1
-priya.shah@example.com,Priya Shah,Engineering,assign,1
-eve.chen@example.com,Eve Chen,Analytics,assign,1
-eve.chen@example.com,Eve Chen,Analytics,assign,1
-luca.fan@example.com,Luca Fan,Product,assign,1
-LUCA.FAN@example.com,Luca Fan,Product,assign,1
-mia.brown@example.com,Mia Brown,HR,assign,1
-ethan.lee@example.com,Ethan Lee,Legal,assign,1
-olivia.ng@example.com,Olivia Ng,Marketing,assign,2
-jack.miller@example.com,Jack Miller,Sales,assign,1
-ava.davis@example.com,Ava Davis,Customer Success,revoke,1
-benjamin.clark@example.com,Benjamin Clark,Engineering,assign,3
-zoe.martin@example.com,Zoe Martin,Operations,assign,1
-harper.evans@example.com,Harper Evans,IT,assign,1
-daniel.king@example.com,Daniel King,Finance,revoke,1
-emma.scott@example.com,Emma Scott,Design,assign,1
-owen.hall@example.com,Owen Hall,Support,assign,1
-isabella.young@example.com,Isabella Young,Security,assign,1
-logan.walker@example.com,Logan Walker,Product,revoke,1
+email,name,department,action
+amy.chen@example.com,Amy Chen,Analytics,assign
+noah.kim@example.com,Noah Kim,Operations,revoke
+liam.patel@example.com,Liam Patel,Finance,assign
+sofia.garcia@example.com,Sofia Garcia,Design,assign
+marco.rossi@example.com,Marco Rossi,Sales,revoke
+nina.wong@example.com,Nina Wong,Support,assign
+priya.shah@example.com,Priya Shah,Engineering,assign
+eve.chen@example.com,Eve Chen,Analytics,assign
+eve.chen@example.com,Eve Chen,Analytics,assign
+luca.fan@example.com,Luca Fan,Product,assign
+LUCA.FAN@example.com,Luca Fan,Product,assign
+mia.brown@example.com,Mia Brown,HR,assign
+ethan.lee@example.com,Ethan Lee,Legal,assign
+olivia.ng@example.com,Olivia Ng,Marketing,assign
+jack.miller@example.com,Jack Miller,Sales,assign
+ava.davis@example.com,Ava Davis,Customer Success,revoke
+benjamin.clark@example.com,Benjamin Clark,Engineering,assign
+zoe.martin@example.com,Zoe Martin,Operations,assign
+harper.evans@example.com,Harper Evans,IT,assign
+daniel.king@example.com,Daniel King,Finance,revoke
+emma.scott@example.com,Emma Scott,Design,assign
+owen.hall@example.com,Owen Hall,Support,assign
+isabella.young@example.com,Isabella Young,Security,assign
+logan.walker@example.com,Logan Walker,Product,revoke

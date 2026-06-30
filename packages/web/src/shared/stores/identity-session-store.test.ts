@@ -38,6 +38,38 @@ function createAccount(
   };
 }
 
+const roleNames: Record<string, string> = {
+  entitlement_manager: 'Entitlement Manager',
+  organization_admin: 'Organization Administrator',
+  platform_admin: 'Platform Administrator',
+};
+
+function addMembership(
+  account: DemoAccount,
+  organizationId: string,
+  roleKey: string,
+  membershipStatus = 'active'
+): void {
+  const organization =
+    account.entitlementOrganizations.find((item) => item.id === organizationId) ?? {
+      id: organizationId,
+      kind: 'tenant',
+      name: `Demo Organization ${organizationId}`,
+      status: 'active',
+    };
+
+  account.memberships.push({
+    membershipStatus,
+    organization,
+    roles: [
+      {
+        key: roleKey,
+        name: roleNames[roleKey] ?? roleKey,
+      },
+    ],
+  });
+}
+
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     headers: {
@@ -81,6 +113,25 @@ function mockIdentitySession(account: DemoAccount, token = `${account.id}-token`
     );
 }
 
+function applyAccountSession(account: DemoAccount) {
+  const store = useIdentitySessionStore();
+
+  store.applySession(
+    {
+      accessToken: 'token',
+      accounts: [account],
+      capabilities: account.capabilities,
+      currentAccount: account,
+      entitlementOrganizations: account.entitlementOrganizations,
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      tokenType: 'Bearer',
+    },
+    account.id
+  );
+
+  return store;
+}
+
 describe('identity session store', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
@@ -95,6 +146,7 @@ describe('identity session store', () => {
       { id: 'org-inactive', status: 'inactive' },
       { id: 'org-active', status: 'active' },
     ]);
+    addMembership(account, 'org-active', 'organization_admin');
 
     vi.stubGlobal('fetch', mockIdentitySession(account));
 
@@ -135,5 +187,57 @@ describe('identity session store', () => {
 
     expect(store.getCurrentAccessToken()).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('detects organization admin membership for the selected entitlement organization', () => {
+    const account = createAccount('user-organization-admin');
+    addMembership(account, 'org-demo-001', 'organization_admin');
+
+    const store = applyAccountSession(account);
+
+    expect(store.canManageSelectedEntitlementOrganizationMembership).toBe(true);
+  });
+
+  it('allows entitlement manager access without organization membership management', () => {
+    const account = createAccount('user-entitlement-manager');
+    addMembership(account, 'org-demo-001', 'entitlement_manager');
+
+    const store = applyAccountSession(account);
+
+    expect(store.hasEntitlementScope).toBe(true);
+    expect(store.selectedEntitlementOrganizationId).toBe('org-demo-001');
+    expect(store.canManageSelectedEntitlementOrganizationMembership).toBe(false);
+  });
+
+  it('does not grant entitlement import access from platform admin membership', () => {
+    const account = createAccount('user-platform-admin');
+    addMembership(account, 'org-demo-001', 'platform_admin');
+
+    const store = applyAccountSession(account);
+
+    expect(store.entitlementOrganizations).toEqual([]);
+    expect(store.selectedEntitlementOrganizationId).toBeNull();
+    expect(store.hasEntitlementScope).toBe(false);
+    expect(store.canManageSelectedEntitlementOrganizationMembership).toBe(false);
+  });
+
+  it('ignores a stored organization when the current account cannot manage that entitlement scope', () => {
+    window.localStorage.setItem(DEMO_ENTITLEMENT_ORGANIZATION_STORAGE_KEY, 'org-platform');
+    const account = createAccount('user-mixed-permissions', [
+      { id: 'org-platform' },
+      { id: 'org-brightline' },
+    ]);
+    addMembership(account, 'org-platform', 'platform_admin');
+    addMembership(account, 'org-brightline', 'entitlement_manager');
+
+    const store = applyAccountSession(account);
+
+    expect(store.entitlementOrganizations.map((organization) => organization.id)).toEqual([
+      'org-brightline',
+    ]);
+    expect(store.selectedEntitlementOrganizationId).toBe('org-brightline');
+    expect(window.localStorage.getItem(DEMO_ENTITLEMENT_ORGANIZATION_STORAGE_KEY)).toBe(
+      'org-brightline'
+    );
   });
 });

@@ -1,10 +1,15 @@
 import { getCurrentIdentityAccessToken } from '@/shared/stores/identity-session-store';
 import { getEntitlementGraphqlUrl } from '@/shared/config/entitlement-service';
 import type {
+  BulkImportHistoryDetail,
+  BulkImportJob,
   BulkImportJobDetail,
   BulkImportJobRow,
+  BulkImportJobStatus,
   BulkImportResultArtifact,
+  CommitBulkImportJobInput,
   CreateBulkImportJobInput,
+  PageResult,
   Product,
   ProductEntitlement,
 } from '@/shared/types';
@@ -31,13 +36,26 @@ type GraphqlResponse<TData> = {
 
 type BulkImportRowsResponse =
   | BulkImportJobRow[]
-  | {
-      items?: BulkImportJobRow[];
-    };
+  | Partial<PageResult<BulkImportJobRow>>;
 
 type EntitlementRequestScope = {
   organizationId?: string | null;
 };
+
+export interface ListBulkImportJobsOptions {
+  organizationId: string;
+  pageNumber?: number;
+  pageSize?: number;
+  productId?: string;
+  status?: BulkImportJobStatus;
+}
+
+export interface ListBulkImportJobRowsOptions {
+  jobId: string;
+  pageNumber?: number;
+  pageSize?: number;
+  status?: BulkImportJobRow['status'];
+}
 
 const PRODUCT_FIELDS = `
   id
@@ -245,6 +263,22 @@ function encodePathSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
+function createQueryString(params: Record<string, number | string | null | undefined>): string {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined || value === '') {
+      continue;
+    }
+
+    searchParams.set(key, String(value));
+  }
+
+  const queryString = searchParams.toString();
+
+  return queryString ? `?${queryString}` : '';
+}
+
 function normalizeBulkImportRowsResponse(response: BulkImportRowsResponse): BulkImportJobRow[] {
   return Array.isArray(response) ? response : (response.items ?? []);
 }
@@ -305,15 +339,55 @@ export function createBulkImportJob(input: CreateBulkImportJobInput): Promise<Bu
   );
 }
 
+export function listBulkImportJobs({
+  organizationId,
+  pageNumber,
+  pageSize,
+  productId,
+  status,
+}: ListBulkImportJobsOptions): Promise<PageResult<BulkImportJob>> {
+  const queryString = createQueryString({
+    pageNumber,
+    pageSize,
+    productId,
+    status,
+  });
+
+  return requestJson<PageResult<BulkImportJob>>(
+    `/organizations/${encodePathSegment(organizationId)}/bulk-import-jobs${queryString}`,
+    {
+      cache: 'no-store',
+    }
+  );
+}
+
 export function getBulkImportJob(jobId: string): Promise<BulkImportJobDetail> {
   return requestJson<BulkImportJobDetail>(`/bulk-import-jobs/${encodePathSegment(jobId)}`, {
     cache: 'no-store',
   });
 }
 
-export async function listBulkImportJobRows(jobId: string): Promise<BulkImportJobRow[]> {
+export function getBulkImportHistoryDetail(jobId: string): Promise<BulkImportHistoryDetail> {
+  return requestJson<BulkImportHistoryDetail>(
+    `/bulk-import-jobs/${encodePathSegment(jobId)}/history-detail`,
+    {
+      cache: 'no-store',
+    }
+  );
+}
+
+export async function listBulkImportJobRows(
+  input: string | ListBulkImportJobRowsOptions
+): Promise<BulkImportJobRow[]> {
+  const options: ListBulkImportJobRowsOptions =
+    typeof input === 'string' ? { jobId: input } : input;
+  const queryString = createQueryString({
+    pageNumber: options.pageNumber,
+    pageSize: options.pageSize,
+    status: options.status,
+  });
   const response = await requestJson<BulkImportRowsResponse>(
-    `/bulk-import-jobs/${encodePathSegment(jobId)}/rows`,
+    `/bulk-import-jobs/${encodePathSegment(options.jobId)}/rows${queryString}`,
     {
       cache: 'no-store',
     }
@@ -328,8 +402,14 @@ export function validateBulkImportJob(jobId: string): Promise<BulkImportJobDetai
   });
 }
 
-export function commitBulkImportJob(jobId: string): Promise<BulkImportJobDetail> {
+export function commitBulkImportJob(
+  jobId: string,
+  input: CommitBulkImportJobInput = {}
+): Promise<BulkImportJobDetail> {
+  const hasBody = Object.keys(input).length > 0;
+
   return requestJson<BulkImportJobDetail>(`/bulk-import-jobs/${encodePathSegment(jobId)}/commit`, {
+    ...(hasBody ? { body: JSON.stringify(input) } : {}),
     method: 'POST',
   });
 }
@@ -364,6 +444,14 @@ export function downloadBulkImportArtifact({
 
 export function downloadBulkImportArtifactsZip(jobId: string): Promise<Blob> {
   return requestBlob(`/bulk-import-jobs/${encodePathSegment(jobId)}/artifacts.zip`, {
+    headers: {
+      Accept: 'application/zip',
+    },
+  });
+}
+
+export function downloadBulkImportArtifactsZipUrl(artifactZipUrl: string): Promise<Blob> {
+  return requestBlob(artifactZipUrl, {
     headers: {
       Accept: 'application/zip',
     },

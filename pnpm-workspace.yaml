@@ -8,4 +8,4 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@tanstack/query-core@5.101.2'
   - '@tanstack/vue-query@5.101.2'
-  - '@hugo-ui/shadcn-vue@0.2.0-local.1782765559315'
+  - '@hugo-ui/shadcn-vue@0.2.0-local.1782765559315 || 0.2.0-local.1782799550122 || 0.2.0-local.1782802130538'

@@ -3,6 +3,7 @@ export type BulkImportJobStatus =
   | 'imported'
   | 'validating'
   | 'validated'
+  | 'awaitingConfirmation'
   | 'readyToCommit'
   | 'processing'
   | 'completed'
@@ -16,6 +17,7 @@ export type BulkImportJobPhase =
   | 'validation_queued'
   | 'validating_rows'
   | 'awaiting_review'
+  | 'awaiting_unregistered_user_confirmation'
   | 'commit_queued'
   | 'applying_changes'
   | 'generating_artifacts'
@@ -29,7 +31,8 @@ export type BulkImportIssueCode =
   | 'duplicate_email_in_file'
   | 'conflicting_actions_in_file'
   | 'invalid_action'
-  | 'invalid_seat_quantity'
+  | 'unregistered_user'
+  | 'user_not_in_organization'
   | 'membership_not_found'
   | 'entitlement_not_active'
   | 'already_allocated'
@@ -50,6 +53,7 @@ export type BulkImportRowAction = 'assign' | 'revoke';
 export type BulkImportRowStatus =
   | 'ready'
   | 'warning'
+  | 'needsConfirmation'
   | 'blocked'
   | 'skipped'
   | 'success'
@@ -65,7 +69,6 @@ export interface BulkImportJobRow {
   name: string;
   department: string;
   action: BulkImportRowAction;
-  seatQuantity: number;
   status: BulkImportRowStatus;
   issues: BulkImportIssue[];
   organizationMembershipId: string | null;
@@ -76,6 +79,7 @@ export interface BulkImportJob {
   id: string;
   organizationId: string;
   productId: string;
+  productName: string;
   orgProductEntitlementId: string;
   fileName: string;
   status: BulkImportJobStatus;
@@ -85,6 +89,9 @@ export interface BulkImportJob {
   totalRows: number;
   readyRows: number;
   warningRows: number;
+  needsConfirmationRows: number;
+  unregisteredUserCount: number;
+  unregisteredSeatQuantity: number;
   blockedRows: number;
   skippedRows: number;
   successRows: number;
@@ -95,6 +102,7 @@ export interface BulkImportJob {
   projectedAvailableQuantity: number;
   canValidate: boolean;
   canCommit: boolean;
+  canConfirmImportRows: boolean;
   canCancel: boolean;
   canDownloadResults: boolean;
   nextPollAfterMs: number | null;
@@ -112,13 +120,67 @@ export type BulkImportJobDetail = BulkImportJob & {
   rows?: BulkImportJobRow[];
 };
 
+export interface PageResult<T> {
+  items: T[];
+  totalElements: number;
+  pageNumber: number;
+  pageSize: number;
+}
+
+export interface BulkImportResultBreakdownItem {
+  id: 'success' | 'needsConfirmation' | 'skipped' | 'failed';
+  label: string;
+  count: number;
+  statuses: BulkImportRowStatus[];
+}
+
+export interface BulkImportIssueReason {
+  code: BulkImportIssue['code'];
+  severity: 'warning' | 'blocked';
+  message: string;
+  rowCount: number;
+}
+
+export interface BulkImportSeatImpact {
+  occupiedBefore: number;
+  assignedSeats: number;
+  revokedSeats: number;
+  occupiedAfter: number;
+  remainingAfter: number;
+  purchasedQuantity: number;
+  occupiedPercentAfter: number;
+}
+
+export interface BulkImportHistoryDetail {
+  job: BulkImportJob;
+  resultSummary: {
+    totalRows: number;
+    processedRows: number;
+    successRows: number;
+    skippedRows: number;
+    needsConfirmationRows: number;
+    unregisteredUserCount: number;
+    unregisteredSeatQuantity: number;
+    failedRows: number;
+    blockedRows: number;
+    failedOrBlockedRows: number;
+    reviewItemRows: number;
+  };
+  resultBreakdown: BulkImportResultBreakdownItem[];
+  issueReasons: BulkImportIssueReason[];
+  seatImpact: BulkImportSeatImpact;
+  download: {
+    canDownloadResults: boolean;
+    artifactZipUrl: string | null;
+  };
+}
+
 export interface CreateBulkImportJobRowInput {
   rowNumber: number;
   email: string;
   name?: string;
   department?: string;
   action?: string;
-  seatQuantity?: number;
 }
 
 export interface CreateBulkImportJobInput {
@@ -127,6 +189,11 @@ export interface CreateBulkImportJobInput {
   orgProductEntitlementId: string;
   fileName: string;
   rows: CreateBulkImportJobRowInput[];
+  canManageOrganizationMembership?: boolean;
 }
 
 export type BulkImportResultArtifact = 'report' | 'success.csv' | 'failed.csv';
+
+export interface CommitBulkImportJobInput {
+  confirmImportRows?: boolean;
+}

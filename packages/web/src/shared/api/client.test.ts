@@ -10,10 +10,14 @@ import {
   createBulkImportJob,
   downloadBulkImportArtifact,
   downloadBulkImportArtifactsZip,
+  downloadBulkImportArtifactsZipUrl,
+  getBulkImportHistoryDetail,
   getBulkImportJob,
   listEntitlements,
   listBulkImportJobRows,
+  listBulkImportJobs,
   listProducts,
+  commitBulkImportJob,
   validateBulkImportJob,
 } from './client';
 
@@ -56,6 +60,7 @@ function createJobPayload() {
     blockedRows: 0,
     canCancel: true,
     canCommit: false,
+    canConfirmImportRows: false,
     canDownloadResults: false,
     canValidate: true,
     cancelRequestedAt: null,
@@ -68,11 +73,13 @@ function createJobPayload() {
     id: 'bulk-import-job-1',
     lastHeartbeatAt: '2026-06-30T00:00:00.000Z',
     nextPollAfterMs: null,
+    needsConfirmationRows: 0,
     organizationId: 'org-demo-001',
     orgProductEntitlementId: 'ent-insight-studio-2026-001',
     phase: 'rows_staged',
     processedRows: 0,
     productId: 'prod-insight-studio',
+    productName: 'Insight Studio',
     progressPercent: 20,
     projectedAllocatedQuantity: 28,
     projectedAvailableQuantity: 47,
@@ -84,6 +91,8 @@ function createJobPayload() {
     status: 'imported',
     successRows: 0,
     totalRows: 1,
+    unregisteredSeatQuantity: 0,
+    unregisteredUserCount: 0,
     validatedAt: null,
     warningRows: 0,
   };
@@ -108,6 +117,7 @@ describe('bulk import API client', () => {
 
     await createBulkImportJob({
       fileName: 'import.csv',
+      canManageOrganizationMembership: true,
       organizationId: 'org-demo-001',
       orgProductEntitlementId: 'ent-insight-studio-2026-001',
       productId: 'prod-insight-studio',
@@ -116,7 +126,6 @@ describe('bulk import API client', () => {
           action: 'assign',
           email: 'lee.carter@example.com',
           rowNumber: 2,
-          seatQuantity: 1,
         },
       ],
     });
@@ -131,6 +140,12 @@ describe('bulk import API client', () => {
         method: 'POST',
       })
     );
+
+    const firstCall = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(firstCall[1].body));
+
+    expect(body.rows[0]).not.toHaveProperty('seatQuantity');
+    expect(body.canManageOrganizationMembership).toBe(true);
   });
 
   it('starts backend validation for an existing job', async () => {
@@ -157,6 +172,44 @@ describe('bulk import API client', () => {
     );
   });
 
+  it('sends confirmation when committing jobs with confirmation rows', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        ...createJobPayload(),
+        canDownloadResults: true,
+        status: 'completed',
+      })
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      commitBulkImportJob('bulk-import-job-1', {
+        confirmImportRows: true,
+      })
+    ).resolves.toMatchObject({
+      id: 'bulk-import-job-1',
+      status: 'completed',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1/commit',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+        method: 'POST',
+      })
+    );
+
+    const firstCall = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(firstCall[1].body));
+
+    expect(body).toEqual({
+      confirmImportRows: true,
+    });
+  });
+
   it('loads jobs without browser cache during polling', async () => {
     const fetchMock = vi.fn(async () => jsonResponse(createJobPayload()));
 
@@ -167,6 +220,119 @@ describe('bulk import API client', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1',
+      expect.objectContaining({
+        cache: 'no-store',
+      })
+    );
+  });
+
+  it('lists bulk import history with pagination filters', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        items: [
+          {
+            ...createJobPayload(),
+            rows: undefined,
+            status: 'completed',
+          },
+        ],
+        pageNumber: 2,
+        pageSize: 10,
+        totalElements: 21,
+      })
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      listBulkImportJobs({
+        organizationId: 'org-demo-001',
+        pageNumber: 2,
+        pageSize: 10,
+        productId: 'prod-insight-studio',
+        status: 'completed',
+      })
+    ).resolves.toMatchObject({
+      items: [
+        {
+          id: 'bulk-import-job-1',
+          status: 'completed',
+        },
+      ],
+      totalElements: 21,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:4317/organizations/org-demo-001/bulk-import-jobs?pageNumber=2&pageSize=10&productId=prod-insight-studio&status=completed',
+      expect.objectContaining({
+        cache: 'no-store',
+      })
+    );
+  });
+
+  it('loads the backend history detail aggregate', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        download: {
+          artifactZipUrl: '/bulk-import-jobs/bulk-import-job-1/artifacts.zip',
+          canDownloadResults: true,
+        },
+        issueReasons: [],
+        job: {
+          ...createJobPayload(),
+          canDownloadResults: true,
+          status: 'completed',
+        },
+        resultBreakdown: [
+          { count: 1, id: 'success', label: 'Success', statuses: ['success'] },
+          {
+            count: 0,
+            id: 'needsConfirmation',
+            label: 'Needs confirmation',
+            statuses: ['needsConfirmation'],
+          },
+          { count: 0, id: 'skipped', label: 'Skipped', statuses: ['skipped'] },
+          { count: 0, id: 'failed', label: 'Failed', statuses: ['failed', 'blocked'] },
+        ],
+        resultSummary: {
+          blockedRows: 0,
+          failedOrBlockedRows: 0,
+          failedRows: 0,
+          processedRows: 1,
+          needsConfirmationRows: 0,
+          reviewItemRows: 0,
+          skippedRows: 0,
+          successRows: 1,
+          totalRows: 1,
+          unregisteredSeatQuantity: 0,
+          unregisteredUserCount: 0,
+        },
+        seatImpact: {
+          assignedSeats: 1,
+          occupiedAfter: 29,
+          occupiedBefore: 28,
+          occupiedPercentAfter: 39,
+          purchasedQuantity: 75,
+          remainingAfter: 46,
+          revokedSeats: 0,
+        },
+      })
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getBulkImportHistoryDetail('bulk-import-job-1')).resolves.toMatchObject({
+      download: {
+        canDownloadResults: true,
+      },
+      job: {
+        id: 'bulk-import-job-1',
+      },
+      resultSummary: {
+        successRows: 1,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1/history-detail',
       expect.objectContaining({
         cache: 'no-store',
       })
@@ -189,7 +355,6 @@ describe('bulk import API client', () => {
             normalizedEmail: 'lee.carter@example.com',
             organizationMembershipId: 'membership-1',
             rowNumber: 2,
-            seatQuantity: 1,
             status: 'ready',
           },
         ],
@@ -206,6 +371,34 @@ describe('bulk import API client', () => {
     ]);
     expect(fetchMock).toHaveBeenCalledWith(
       'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1/rows',
+      expect.objectContaining({
+        cache: 'no-store',
+      })
+    );
+  });
+
+  it('queries failed rows with backend row filters', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        items: [],
+        pageNumber: 0,
+        pageSize: 50,
+        totalElements: 0,
+      })
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      listBulkImportJobRows({
+        jobId: 'bulk-import-job-1',
+        pageNumber: 0,
+        pageSize: 50,
+        status: 'failed',
+      })
+    ).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1/rows?pageNumber=0&pageSize=50&status=failed',
       expect.objectContaining({
         cache: 'no-store',
       })
@@ -357,6 +550,31 @@ describe('bulk import API client', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(downloadBulkImportArtifactsZip('bulk-import-job-1')).resolves.toBeInstanceOf(Blob);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1/artifacts.zip',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'application/zip',
+        }),
+      })
+    );
+  });
+
+  it('downloads the result package zip from the history detail artifact url', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response('zip-content', {
+          headers: {
+            'Content-Type': 'application/zip',
+          },
+        })
+    );
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      downloadBulkImportArtifactsZipUrl('/bulk-import-jobs/bulk-import-job-1/artifacts.zip')
+    ).resolves.toBeInstanceOf(Blob);
     expect(fetchMock).toHaveBeenCalledWith(
       'http://127.0.0.1:4317/bulk-import-jobs/bulk-import-job-1/artifacts.zip',
       expect.objectContaining({

@@ -47,10 +47,15 @@ function createProductOptionKey(productId: string, entitlementId: string): strin
 
 const VALIDATION_TERMINAL_STATUSES = new Set<BulkImportJobStatus>([
   'validated',
+  'awaitingConfirmation',
   'readyToCommit',
   'cancelled',
   'failed',
 ]);
+
+type CreateAndValidateOptions = {
+  canManageOrganizationMembership?: boolean;
+};
 
 const COMMIT_TERMINAL_STATUSES = new Set<BulkImportJobStatus>([
   'completed',
@@ -94,26 +99,14 @@ function mapEntitlementToOption(product: Product, entitlement: ProductEntitlemen
   };
 }
 
-function hasCreateDtoInvalidSeatQuantity(row: ImportCsvRow): boolean {
-  return row.seatQuantity === null || !Number.isInteger(row.seatQuantity) || row.seatQuantity <= 0;
-}
-
-function getCreateDtoBlockedRows(rows: ImportCsvRow[]): ImportCsvRow[] {
-  return rows.filter((row) => !row.deleted && hasCreateDtoInvalidSeatQuantity(row));
-}
-
-function hasCreateReadySeatQuantity(
-  row: ImportCsvRow
-): row is ImportCsvRow & { seatQuantity: number } {
-  return !hasCreateDtoInvalidSeatQuantity(row);
-}
-
 function normalizeBackendRowStatus(status: BulkImportJobRow['status']): ImportRowStatus {
   switch (status) {
     case 'ready':
       return 'ready';
     case 'warning':
       return 'warning';
+    case 'needsConfirmation':
+      return 'needsConfirmation';
     case 'blocked':
       return 'blocked';
     case 'skipped':
@@ -138,7 +131,6 @@ function mapBackendRow(row: BulkImportJobRow): ImportCsvRow {
     issues: row.issues,
     name: row.name,
     rowNumber: row.rowNumber,
-    seatQuantity: row.seatQuantity,
     status: normalizeBackendRowStatus(row.status),
     userKey: row.normalizedEmail || row.email.trim().toLowerCase(),
   };
@@ -198,12 +190,15 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
 
       return (
         Boolean(state.importedFile && state.selectedProductId && state.selectedEntitlementId) &&
-        activeRows.length > 0 &&
-        getCreateDtoBlockedRows(state.rows).length === 0
+        activeRows.length > 0
       );
     },
     canCommit(state) {
-      return Boolean(state.currentJob?.canCommit);
+      return Boolean(
+        state.currentJob &&
+          state.currentJob.blockedRows === 0 &&
+          (state.currentJob.canCommit || state.currentJob.canConfirmImportRows)
+      );
     },
     backendBusy(state) {
       return state.creatingJob || state.validatingJob || state.committingJob || state.pollingJob;
@@ -211,7 +206,9 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
     validationComplete(state) {
       return Boolean(
         state.currentJob &&
-          (state.currentJob.status === 'validated' || state.currentJob.status === 'readyToCommit')
+          (state.currentJob.status === 'validated' ||
+            state.currentJob.status === 'awaitingConfirmation' ||
+            state.currentJob.status === 'readyToCommit')
       );
     },
     commitComplete(state) {
@@ -284,7 +281,10 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
       this.selectedJobId = job.id;
 
       if (rows) {
-        this.rows = mapBackendRows(rows);
+        this.rows = normalizeImportRows(mapBackendRows(rows), {
+          preserveNonLocalIssues: true,
+          preserveStatuses: true,
+        });
       }
 
       this.products = this.products.map((product) =>
@@ -321,28 +321,41 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
     },
     updateRow(
       rowId: string,
-      patch: Partial<
-        Pick<ImportCsvRow, 'email' | 'name' | 'department' | 'action' | 'seatQuantity'>
-      >
+      patch: Partial<Pick<ImportCsvRow, 'email' | 'name' | 'department' | 'action'>>
     ) {
       this.clearBackendJob();
       this.rows = normalizeImportRows(
-        this.rows.map((row) => (row.id === rowId ? cloneRowWithPatch(row, patch) : row))
+        this.rows.map((row) => (row.id === rowId ? cloneRowWithPatch(row, patch) : row)),
+        {
+          preserveNonLocalIssues: true,
+          preserveStatuses: true,
+        }
       );
     },
     markRowDeleted(rowId: string) {
       this.clearBackendJob();
       this.rows = normalizeImportRows(
-        this.rows.map((row) => (row.id === rowId ? { ...row, deleted: true } : row))
+        this.rows.map((row) => (row.id === rowId ? { ...row, deleted: true } : row)),
+        {
+          preserveNonLocalIssues: true,
+          preserveStatuses: true,
+        }
       );
     },
     undoRowDeleted(rowId: string) {
       this.clearBackendJob();
       this.rows = normalizeImportRows(
-        this.rows.map((row) => (row.id === rowId ? { ...row, deleted: false } : row))
+        this.rows.map((row) => (row.id === rowId ? { ...row, deleted: false } : row)),
+        {
+          preserveNonLocalIssues: true,
+          preserveStatuses: true,
+        }
       );
     },
-    async createAndValidateCurrentImport(organizationId: string): Promise<BulkImportJobDetail | null> {
+    async createAndValidateCurrentImport(
+      organizationId: string,
+      options: CreateAndValidateOptions = {}
+    ): Promise<BulkImportJobDetail | null> {
       const selectedProduct = this.selectedProduct;
 
       if (!selectedProduct || !this.importedFile) {
@@ -356,21 +369,11 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
       }
 
       const activeRows = this.rows.filter((row) => !row.deleted);
-      const createBlockedRows = getCreateDtoBlockedRows(this.rows);
 
       if (activeRows.length === 0) {
         this.apiError = 'The CSV does not contain active rows to import.';
         return null;
       }
-
-      if (createBlockedRows.length > 0) {
-        this.apiError = `Fix invalid seat quantities before backend validation. Rows: ${createBlockedRows
-          .map((row) => row.rowNumber)
-          .join(', ')}.`;
-        return null;
-      }
-
-      const createRows = activeRows.filter(hasCreateReadySeatQuantity);
 
       this.creatingJob = true;
       this.validatingJob = false;
@@ -379,16 +382,16 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
       try {
         const createdJob = await createBulkImportJob({
           fileName: this.importedFile.name,
+          canManageOrganizationMembership: options.canManageOrganizationMembership === true,
           organizationId,
           orgProductEntitlementId: selectedProduct.entitlementId,
           productId: selectedProduct.id,
-          rows: createRows.map((row) => ({
+          rows: activeRows.map((row) => ({
             action: String(row.action || 'assign'),
             department: row.department,
             email: row.email,
             name: row.name,
             rowNumber: row.rowNumber,
-            seatQuantity: row.seatQuantity,
           })),
         });
 
@@ -415,13 +418,27 @@ export const useImportWorkflowStore = defineStore('importWorkflow', {
         return null;
       }
 
+      if (this.currentJob?.blockedRows && this.currentJob.blockedRows > 0) {
+        this.apiError = 'Review and fix blocked rows before starting import.';
+        return null;
+      }
+
+      if (!this.canCommit) {
+        this.apiError = 'The backend job is not ready to start import.';
+        return null;
+      }
+
       this.committingJob = true;
       this.apiError = null;
       this.processStartedAt = new Date().toISOString();
       this.processCompletedAt = null;
 
       try {
-        await commitBulkImportJob(this.selectedJobId);
+        const requiresConfirmation = this.currentJob?.canConfirmImportRows === true;
+
+        await commitBulkImportJob(this.selectedJobId, {
+          ...(requiresConfirmation ? { confirmImportRows: true } : {}),
+        });
         const job = await this.refreshCurrentJob();
 
         return job;
